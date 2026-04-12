@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GenSEO — Keyword Plan</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2322c55e'/><text x='16' y='22' text-anchor='middle' font-size='18' font-weight='700' fill='white' font-family='sans-serif'>G</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1029,6 +1030,8 @@ function saveWpConfig(){
   localStorage.setItem('genseo_wp', JSON.stringify(cfg));
   closeWpModal();
   toast('Đã lưu cấu hình WordPress ✓','ok');
+  // Re-render IL page để unlock nút Quét
+  if(curView === 'il') renderILPage();
 }
 function openWpModal(){
   const cfg = getWpConfig();
@@ -1080,7 +1083,7 @@ function renderILPage(){
           </div>
           <button class="btn-outline" onclick="openWpModal()">🔌 ${cfg?'WP: '+cfg.url.replace(/https?:\/\//,'').substring(0,20)+'...':'Kết nối WordPress'}</button>
           <button class="btn-outline" onclick="rollbackIL()" ${hasScanned&&Object.keys(ilData.applied||{}).length?'':'disabled'} title="Hoàn tác các link đã áp dụng">↩ Sửa lỗi</button>
-          <button class="btn-green" id="ilScanBtn" onclick="startScan()" ${!cfg?'disabled':''}>
+          <button class="btn-green" id="ilScanBtn" onclick="startScan()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
             ${hasScanned?'Quét lại':'Quét liên kết'} ${cfg?'('+postCount+' bài)':''}
           </button>
@@ -1104,9 +1107,9 @@ function renderILIntro(){
           Internal linking giúp Google hiểu cấu trúc website và truyền sức mạnh SEO giữa các trang.
           Hệ thống sẽ quét toàn bộ bài viết, phân tích keyword và nội dung — gợi ý anchor text phù hợp và chèn link chỉ với 1 click.
         </div>
-        <button class="il-scan-btn" onclick="startScan()" ${!cfg?'disabled':''}>
+        <button class="il-scan-btn" onclick="startScan()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          ${cfg?'Quét liên kết':'Kết nối WordPress trước'}
+          Quét liên kết
         </button>
         ${!cfg?'<p style="margin-top:10px;font-size:11.5px;color:#f59e0b">⚠ Chưa kết nối WordPress — nhấn "Kết nối WordPress" góc trên phải</p>':''}
       </div>
@@ -1155,7 +1158,7 @@ function renderILIntro(){
 // ── SCAN ──
 async function startScan(){
   const cfg = getWpConfig();
-  if(!cfg){ toast('Kết nối WordPress trước','err'); openWpModal(); return; }
+  if(!cfg){ toast('Chưa kết nối WordPress — vui lòng nhập thông tin','err'); openWpModal(); return; }
   const apiKey = getApiKey();
   if(!apiKey){ toast('Cần Anthropic API Key','err'); openSettings(); return; }
 
