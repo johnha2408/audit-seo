@@ -1661,6 +1661,90 @@ async function applyLinks(postIds){
   const btn = document.getElementById('ilApplyAllBtn');
   if(btn){ btn.disabled=true; btn.textContent='Đang áp dụng...'; }
 
+  const apiKey = getApiKey();
+  const verifiedUrlMapGlobal = {};
+  ilData.posts.forEach(p=>{ verifiedUrlMapGlobal[String(p.id)] = p.link||''; });
+
+  // ── PRE-GENERATE tất cả sentences cần auto-write TRƯỚC khi apply ──────────
+  // Mục đích: chỉ 1 AI call cho tất cả bài, tránh 429 khi apply nhiều bài
+  const autoWriteQueue = []; // [{postId, anchor, targetTitle, url, postTitle, bodyCtx}]
+
+  for(const postId of postIds){
+    const post = ilData.posts.find(p=>String(p.id)===String(postId));
+    if(!post) continue;
+    const suggs = ilData.suggestions[postId]||[];
+    const maxLinks = getILSettings().maxLinks;
+    const postTitle = post.title?.rendered||'';
+    // Lấy body context từ WP data đã có
+    const bodyCtx = (post.content?.rendered||post.excerpt?.rendered||'')
+      .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').substring(0,300);
+    for(const s of suggs){
+      const realUrl = verifiedUrlMapGlobal[String(s.target_id)]||'';
+      if(!s.anchor||!realUrl) continue;
+      if(s.anchor.trim().split(/\s+/).length < 2) continue;
+      if(String(s.target_id)===String(postId)) continue;
+      // Chỉ queue nếu anchor KHÔNG có trong body (cần auto-write)
+      const bodyText = bodyCtx.toLowerCase();
+      if(!bodyText.includes(s.anchor.toLowerCase())){
+        autoWriteQueue.push({ postId:String(postId), anchor:s.anchor, targetTitle:s.target_title||'', url:realUrl, postTitle, bodyCtx });
+      }
+    }
+  }
+
+  // Gọi AI 1 lần cho tất cả, retry nếu 429
+  const preSentences = {}; // key: "postId|anchor" → sentence HTML
+  if(autoWriteQueue.length > 0 && apiKey){
+    const writeItems = autoWriteQueue.map((item,i)=>
+      (i+1)+'. post="'+item.postTitle.substring(0,40)+'" anchor="'+item.anchor+'" target="'+item.targetTitle+'"'
+    ).join('\n');
+    // Context duy nhất — lấy body của bài đầu tiên làm reference
+    const sampleCtx = autoWriteQueue[0]?.bodyCtx||'';
+    const writePrompt = 'You are an SEO content writer. Write contextual sentences for blog internal linking.\n\n'+
+      'For each item below, write 1-2 natural sentences (total 15-30 words) that:\n'+
+      '- Fit naturally as a concluding or bridging sentence in the post context\n'+
+      '- Contain the exact anchor phrase verbatim\n'+
+      '- Provide genuine reader value, not promotional\n'+
+      '- Match the language and tone of the post title\n'+
+      '- Sound like they belong in the article, not added artificially\n\n'+
+      'Items (post title | anchor to include | links to):\n'+writeItems+'\n\n'+
+      'Return ONLY compact JSON array:\n'+
+      '[{"anchor":"...","sentence":"1-2 sentences containing anchor verbatim"}]\n'+
+      'One entry per item, same order. No markdown, no explanation.';
+
+    // Retry với backoff khi gặp 429
+    for(let attempt=0; attempt<3; attempt++){
+      if(attempt > 0){
+        const wait = attempt * 5000;
+        toast('Rate limit — chờ '+Math.round(wait/1000)+'s rồi thử lại...','ok');
+        await new Promise(r=>setTimeout(r, wait));
+      }
+      try {
+        const aiResp = await fetch('https://openrouter.ai/api/v1/chat/completions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
+          body: JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free', max_tokens:1200, messages:[{role:'user',content:writePrompt}]})
+        });
+        if(aiResp.status === 429){ continue; } // retry
+        if(aiResp.ok){
+          const aiData = await aiResp.json();
+          const aiTxt = (aiData.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
+          const jsonM = aiTxt.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+          if(jsonM){
+            const parsed = JSON.parse(jsonM[0]);
+            parsed.forEach((item,i)=>{
+              if(autoWriteQueue[i] && item.sentence && item.anchor){
+                const key = autoWriteQueue[i].postId+'|'+autoWriteQueue[i].anchor.toLowerCase();
+                preSentences[key] = { sentence: item.sentence, anchor: item.anchor, url: autoWriteQueue[i].url };
+              }
+            });
+          }
+          break; // success
+        }
+      } catch(e){ console.warn('Pre-generate error:', e); break; }
+    }
+  }
+  // ── END PRE-GENERATE ───────────────────────────────────────────────────────
+
   let ok=0, fail=0;
   for(const postId of postIds){
     try {
@@ -1786,65 +1870,44 @@ async function applyLinks(postIds){
       });
 
       if(pendingSuggs.length > 0 && injected < maxLinks){
-        const apiKey = getApiKey();
-        const postTitle = post.title?.rendered || '';
-        const plainBody = content.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').substring(0,800);
+        // Dùng preSentences đã generate trước — không gọi AI trong loop
+        const insertSentenceAtRatio = (sentence, ratio) => {
+          const freshParas = getParagraphs(content);
+          const bodyParas = freshParas.filter((_,pi) => pi > 0);
+          if(!bodyParas.length) return false;
+          const pickIdx = Math.min(Math.floor(bodyParas.length * ratio), bodyParas.length-1);
+          const targetP = bodyParas[pickIdx];
+          const insertAt = targetP.start + targetP.raw.length - 4;
+          content = content.slice(0, insertAt) + ' ' + sentence + content.slice(insertAt);
+          return true;
+        };
 
-        // Gọi AI viết các câu transition
-        try {
-          const writePrompt = 'You are an SEO content writer. Write natural transition sentences to be appended to relevant paragraphs in a blog post.\n\n'+
-            'Post title: '+postTitle+'\n'+
-            'Post summary (first 800 chars): '+plainBody+'\n\n'+
-            'For each item below, write ONE natural sentence (15-25 words) that:\n'+
-            '- Flows naturally as a concluding sentence for a paragraph in this post\n'+
-            '- Contains the exact anchor phrase verbatim\n'+
-            '- Provides genuine value to the reader (SEO + GEO best practice)\n'+
-            '- Is NOT promotional, NOT repetitive of existing content\n'+
-            '- In the SAME LANGUAGE as the post (English if post is English)\n\n'+
-            'Items:\n'+
-            pendingSuggs.slice(0, maxLinks - injected).map((s,i)=>(i+1)+'. anchor="'+s.anchor+'" links_to="'+s.target_title+'" url="'+verifiedUrlMap[s.target_id]+'"').join('\n')+'\n\n'+
-            'Return JSON only: [{"anchor":"...","sentence":"...full sentence with anchor...","url":"..."}]';
+        for(let si=0; si<pendingSuggs.length; si++){
+          if(injected >= maxLinks) break;
+          const s = pendingSuggs[si];
+          const realUrl = verifiedUrlMap[s.target_id] || s.target_url || '';
+          if(!realUrl) continue;
 
-          const aiResp = await fetch('https://openrouter.ai/api/v1/chat/completions',{
-            method:'POST',
-            headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
-            body: JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free', max_tokens:800, messages:[{role:'user',content:writePrompt}]})
-          });
-          if(aiResp.ok){
-            const aiData = await aiResp.json();
-            const aiTxt = (aiData.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
-            const jsonM = aiTxt.match(/\[\s*\{[\s\S]*\}\s*\]/);
-            if(jsonM){
-              const sentences = JSON.parse(jsonM[0]);
-              for(let si=0; si<sentences.length; si++){
-                if(injected >= maxLinks) break;
-                const item = sentences[si];
-                if(!item.sentence || !item.anchor || !item.url) continue;
-                // Wrap anchor thành link
-                const escA = escRe(item.anchor);
-                const linkedSentence = item.sentence.replace(
-                  new RegExp('('+escA+')','i'),
-                  '<a href="'+item.url+'" target="_blank" rel="noopener noreferrer">$1</a>'
-                );
-                // Mỗi câu chèn vào paragraph khác nhau — dàn từ 50% đến cuối bài
-                const freshParas = getParagraphs(content);
-                const bodyParas = freshParas.filter((p,pi) => pi > 0); // bỏ para đầu tiên
-                if(!bodyParas.length) break;
-                // Chia đều: sentence 0 → 50%, sentence 1 → 65%, sentence 2 → 80%...
-                const ratio = 0.5 + (si / Math.max(sentences.length, 1)) * 0.4;
-                const pickIdx = Math.min(Math.floor(bodyParas.length * ratio), bodyParas.length - 1);
-                const targetP = bodyParas[pickIdx];
-                // Chèn TRƯỚC </p>
-                const closeTag = targetP.raw.slice(-4); // </p>
-                const insertAt = targetP.start + targetP.raw.length - closeTag.length;
-                content = content.slice(0, insertAt) + ' ' + linkedSentence + content.slice(insertAt);
-                injected++;
-              }
-            }
+          const key = String(postId)+'|'+s.anchor.toLowerCase();
+          const preGen = preSentences[key];
+
+          if(!preGen || !preGen.sentence){
+            // Không có pre-generated sentence → skip bài này
+            continue;
           }
-        } catch(writeErr){ console.warn('Auto-write failed:', writeErr); }
+
+          // Wrap anchor thành link
+          const escA = escRe(preGen.anchor||s.anchor);
+          const linked = preGen.sentence.replace(
+            new RegExp('('+escA+')','gi'),
+            '<a href="'+realUrl+'" target="_blank" rel="noopener noreferrer">$1</a>'
+          );
+          const ratio = 0.5 + (si / Math.max(pendingSuggs.length, 1)) * 0.35;
+          if(insertSentenceAtRatio(linked, ratio)) injected++;
+        }
       }
 
+      // FIX BUG: Chỉ mark "applied" nếu thực sự inject được link
       if(injected === 0){ ok++; ilData.applied[postId]='skipped'; continue; }
 
       // Push updated content back to WP
