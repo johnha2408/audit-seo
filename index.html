@@ -2517,11 +2517,14 @@ function renderSEODashboard(siteList){
       </div>
     </div>
 
-    <!-- Issues section -->
+    <!-- Full SEO Checklist -->
     <div class="seo-section">
-      <div class="seo-section-title">⚠️ Phân tích Issues</div>
-      <div id="seoIssues">
-        ${generateSEOIssues(queries, pages, totals)}
+      <div class="seo-section-title" style="margin-bottom:14px">
+        📋 SEO Expert Checklist
+        <span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:6px">— phân tích dựa trên dữ liệu GSC thực tế</span>
+      </div>
+      <div id="seoChecklist">
+        ${generateSEOChecklist(queries, pages, totals)}
       </div>
     </div>
 
@@ -2581,49 +2584,164 @@ function renderSEODashboard(siteList){
     </div>`;
 }
 
-function generateSEOIssues(queries, pages, totals){
-  const issues = [];
+function generateSEOChecklist(queries, pages, totals){
+  // ── Helper ──
+  const pct = (n,total) => total ? (n/total*100).toFixed(1) : 0;
+  const fmtPos = p => parseFloat(p).toFixed(1);
 
-  // Low CTR
-  if(parseFloat(totals.ctr) < 3){
-    issues.push({type:'critical', icon:'🔴', title:'CTR thấp ('+totals.ctr+'%)', desc:'CTR dưới 3% cho thấy title/meta description chưa hấp dẫn. Cần tối ưu lại title tag và meta description cho các trang có nhiều impressions.'});
-  }
+  // Pre-compute datasets
+  const quickWins    = queries.filter(r => r.position > 10 && r.position <= 20 && r.impressions >= 30);
+  const top3Queries  = queries.filter(r => r.position <= 3);
+  const lowCtrQ      = queries.filter(r => r.impressions >= 100 && r.ctr < 0.02);
+  const zeroClikQ    = queries.filter(r => r.impressions >= 50  && r.clicks === 0);
+  const lowCtrPages  = pages.filter(r  => r.impressions >= 200 && r.ctr < 0.01);
+  const top10Pages   = pages.filter(r  => r.clicks >= 3);
+  const brandQ       = queries.filter(r => (r.keys[0]||'').includes(gscSiteUrl.replace(/https?:\/\//,'').split('/')[0].replace('www.','')));
+  const pos1to3Pages = pages.filter(r  => r.position <= 3);
+  const highPosLowImp = queries.filter(r => r.position <= 5 && r.impressions < 20);
+  const cannib        = (() => {
+    const seen = {}; const dupes = [];
+    queries.forEach(r => { const w = (r.keys[0]||'').split(' ').sort().join(' '); if(seen[w]) dupes.push(r); else seen[w]=true; });
+    return dupes;
+  })();
+  const avgCTR = parseFloat(totals.ctr);
+  const avgPos = parseFloat(totals.position);
 
-  // Bad position
-  if(parseFloat(totals.position) > 20){
-    issues.push({type:'warning', icon:'🟡', title:'Thứ hạng trung bình thấp (pos. '+totals.position+')', desc:'Thứ hạng >20 nghĩa là phần lớn trang không xuất hiện trên trang 1. Ưu tiên tối ưu nội dung cho các trang có impressions cao nhưng vị trí thấp.'});
-  }
+  // ── Checklist item builder ──
+  // severity: 'critical' | 'warning' | 'ok' | 'info'
+  const item = (severity, category, title, detail, action) => ({ severity, category, title, detail, action });
 
-  // Queries with high impressions but low clicks
-  const highImpLowCtr = queries.filter(r => r.impressions > 100 && r.ctr < 0.02);
-  if(highImpLowCtr.length > 3){
-    issues.push({type:'warning', icon:'🟡', title:`${highImpLowCtr.length} queries có impressions cao nhưng CTR thấp`, desc:`Các query như "${highImpLowCtr[0]?.keys[0]}", "${highImpLowCtr[1]?.keys[0]||''}" xuất hiện nhiều nhưng ít người click. Cần cải thiện title/description cho các trang rank cho query này.`});
-  }
+  const checks = [];
 
-  // Pages stuck on page 2 (position 11-20)
-  const page2 = queries.filter(r => r.position > 10 && r.position <= 20 && r.impressions > 50);
-  if(page2.length > 0){
-    issues.push({type:'info', icon:'🔵', title:`${page2.length} queries đang ở trang 2 (pos. 11-20)`, desc:`Cơ hội "quick win": các query này đang gần top 10. Tối ưu thêm nội dung, internal links và E-E-A-T để đẩy lên trang 1. Ví dụ: "${page2[0]?.keys[0]}"`});
-  }
+  // ════════════════════════════════════
+  // 1. PERFORMANCE & TRAFFIC
+  // ════════════════════════════════════
+  // CTR overall
+  if(avgCTR < 1.5)       checks.push(item('critical','Performance','CTR tổng thể cực thấp ('+avgCTR+'%)', 'Dưới 1.5% là dấu hiệu nghiêm trọng: title/meta không hấp dẫn hoặc SERP bị chiếm bởi ads/features.','Audit toàn bộ title tags — thêm power words, numbers, brackets. Ưu tiên top 5 trang có nhiều impressions nhất.'));
+  else if(avgCTR < 3)    checks.push(item('warning','Performance','CTR tổng thể thấp ('+avgCTR+'%)','CTR 1.5–3% cho thấy title/description chưa tối ưu so với intent của user.','Rewrite title/meta cho top 10 trang có impr. cao nhất. Test A/B với GSC sau 30 ngày.'));
+  else                   checks.push(item('ok','Performance','CTR tốt ('+avgCTR+'%)','CTR >3% là mức tốt. Duy trì bằng cách monitor định kỳ.',''));
 
-  // Top page with low CTR
-  const lowCtrPage = pages.filter(r => r.impressions > 200 && r.ctr < 0.01);
-  if(lowCtrPage.length > 0){
-    issues.push({type:'warning', icon:'🟡', title:`${lowCtrPage.length} trang có CTR cực thấp (<1%)`, desc:`Trang "${lowCtrPage[0]?.keys[0].replace(/^https?:\/\/[^\/]+/,'')}" và ${lowCtrPage.length-1} trang khác có rất nhiều impressions nhưng gần như không ai click. Ưu tiên cập nhật title và meta description.`});
-  }
+  // Avg Position
+  if(avgPos > 30)        checks.push(item('critical','Performance','Thứ hạng trung bình rất thấp (pos. '+fmtPos(avgPos)+')','Pos. >30 nghĩa là phần lớn content không được index hoặc không đủ relevance.','Ưu tiên fix technical issues (crawl, index), rà soát E-E-A-T và topical authority.'));
+  else if(avgPos > 15)   checks.push(item('warning','Performance','Thứ hạng trung bình cần cải thiện (pos. '+fmtPos(avgPos)+')','Pos. 15–30 nghĩa là nhiều trang đang ở trang 2–3. Cần link building và content depth.','Tập trung nội dung pillar page, thêm internal links từ các trang authority cao.'));
+  else if(avgPos > 7)    checks.push(item('info','Performance','Thứ hạng khá (pos. '+fmtPos(avgPos)+')','Pos. 7–15: nhiều cơ hội lên top 5.','Push content ở pos. 7–15 bằng cách update nội dung, thêm FAQ schema, tăng E-E-A-T.'));
+  else                   checks.push(item('ok','Performance','Thứ hạng tốt (pos. '+fmtPos(avgPos)+')','Pos. <7 là tốt. Bảo vệ bằng cách monitor thay đổi thứ hạng hàng tuần.',''));
 
-  if(!issues.length){
-    issues.push({type:'info', icon:'✅', title:'Không phát hiện lỗi nghiêm trọng', desc:'Website đang hoạt động tốt trong khoảng thời gian được chọn. Tiếp tục theo dõi và tối ưu các trang có position từ 5-15 để cải thiện thêm.'});
-  }
+  // ════════════════════════════════════
+  // 2. QUICK WINS — Trang 2 lên trang 1
+  // ════════════════════════════════════
+  if(quickWins.length >= 5)
+    checks.push(item('critical','Quick Wins',quickWins.length+' queries đang ở trang 2 (pos. 11–20)','Đây là CƠ HỘI LỚN NHẤT — pages đang gần top 10, chỉ cần một ít optimization để breakthrough.','Top 3 quick wins: '+quickWins.slice(0,3).map(r=>'"'+r.keys[0]+'" (pos.'+r.position.toFixed(0)+')').join(' / ')+'. Action: update H2s, thêm internal links, bổ sung FAQ schema.'));
+  else if(quickWins.length > 0)
+    checks.push(item('warning','Quick Wins',quickWins.length+' queries cần push lên top 10','Các query pos. 11–20 gần trang 1, cần ít effort để improve.','Query ưu tiên: '+quickWins.slice(0,2).map(r=>'"'+r.keys[0]+'"').join(', ')+'. Thêm nội dung chuyên sâu và internal links.'));
+  else
+    checks.push(item('ok','Quick Wins','Không có query bị kẹt ở trang 2','Tốt — các queries chính đang ở trang 1 hoặc chưa đủ impressions.',''));
 
-  return issues.map(i=>`
-    <div class="issue-item issue-${i.type}">
-      <span class="issue-icon">${i.icon}</span>
-      <div>
-        <div class="issue-title ${i.type}">${i.title}</div>
-        <div class="issue-desc">${i.desc}</div>
-      </div>
-    </div>`).join('');
+  // ════════════════════════════════════
+  // 3. CLICK OPPORTUNITY
+  // ════════════════════════════════════
+  if(zeroClikQ.length > 10)
+    checks.push(item('critical','Click Gap',zeroClikQ.length+' queries có impressions nhưng 0 clicks','Quá nhiều queries được hiển thị nhưng không ai click — keyword intent mismatch nghiêm trọng.','Review từng page: title có match search intent không? Snippet có bị featured snippet "ăn" traffic không? Xem xét rich snippet schema.'));
+  else if(zeroClikQ.length > 3)
+    checks.push(item('warning','Click Gap',zeroClikQ.length+' queries nhiều impressions, 0 clicks','Ví dụ: '+zeroClikQ.slice(0,2).map(r=>'"'+r.keys[0]+'" ('+r.impressions+' impr.)').join(', '),'Rewrite title để match intent. Thêm structured data để cạnh tranh featured snippet.'));
+  else
+    checks.push(item('ok','Click Gap','Click gap ở mức kiểm soát được','Queries có impr. đều có clicks hợp lý.',''));
+
+  // ════════════════════════════════════
+  // 4. TOP PAGES HEALTH
+  // ════════════════════════════════════
+  if(lowCtrPages.length > 5)
+    checks.push(item('critical','On-Page',lowCtrPages.length+' trang traffic cao nhưng CTR <1%','Đây là "money pages" đang bị lãng phí — nhiều người thấy nhưng không ai click.','Ưu tiên update: '+lowCtrPages.slice(0,2).map(r=>r.keys[0].replace(/^https?:\/\/[^\/]+/,'')).join(', ')+'. Rewrite title: thêm số, bracket, power words phù hợp với user intent.'));
+  else if(lowCtrPages.length > 0)
+    checks.push(item('warning','On-Page',lowCtrPages.length+' trang có CTR thấp (<1%)','Một số trang có nhiều impressions nhưng ít click.','Update meta description — phải describe rõ value proposition và include CTA tự nhiên.'));
+  else
+    checks.push(item('ok','On-Page','CTR các trang chính đều hợp lý','Không có trang nào bị "wasted impressions" nghiêm trọng.',''));
+
+  // ════════════════════════════════════
+  // 5. CONTENT CANNIBALIZATION
+  // ════════════════════════════════════
+  if(cannib.length > 5)
+    checks.push(item('warning','Content','Có thể có keyword cannibalization ('+cannib.length+' queries tương tự)','Nhiều queries trùng lặp về semantic meaning — nhiều pages đang cạnh tranh nhau cho cùng keyword.','Consolidate content: merge các bài viết tương tự. Dùng canonical tag. Chọn 1 "winner page" và redirect hoặc internal link các bài còn lại về đó.'));
+  else
+    checks.push(item('ok','Content','Không phát hiện cannibalization rõ ràng','Các queries trông đều có page đích riêng biệt.',''));
+
+  // ════════════════════════════════════
+  // 6. TOP PERFORMERS — PROTECT & GROW
+  // ════════════════════════════════════
+  if(top3Queries.length > 0)
+    checks.push(item('ok','Growth',''+top3Queries.length+' queries đang ở Top 3 — cần bảo vệ','Top 3 queries: '+top3Queries.slice(0,3).map(r=>'"'+r.keys[0]+'" (pos.'+r.position.toFixed(1)+')').join(' / '),'Monitor weekly. Đảm bảo các trang này được internal link nhiều, content được update định kỳ, không bị thin content.'));
+  else
+    checks.push(item('warning','Growth','Chưa có query nào ở Top 3 trong khoảng thời gian này','Cần push mạnh hơn cho các queries chính.','Tăng E-E-A-T: thêm author bio, cite sources, cập nhật năm trong title, thêm original data.'));
+
+  // ════════════════════════════════════
+  // 7. HIGH POS LOW VISIBILITY
+  // ════════════════════════════════════
+  if(highPosLowImp.length > 3)
+    checks.push(item('info','Visibility',highPosLowImp.length+' queries thứ hạng tốt nhưng impressions thấp','Rank tốt nhưng ít được hiển thị — keyword demand thấp hoặc SERP features đang chiếm chỗ.','Expand topic coverage: thêm related queries, long-tail variations. Xem xét thêm FAQ/HowTo schema để xuất hiện trong featured snippets.'));
+
+  // ════════════════════════════════════
+  // 8. BRANDED vs NON-BRANDED
+  // ════════════════════════════════════
+  const totalClicks = totals.clicks;
+  const brandedClicks = brandQ.reduce((a,r)=>a+r.clicks,0);
+  const brandedPct = totalClicks ? (brandedClicks/totalClicks*100).toFixed(0) : 0;
+  if(brandedPct > 60)
+    checks.push(item('warning','Brand vs Organic','Traffic branded quá cao ('+brandedPct+'% là branded queries)','Phụ thuộc nhiều vào branded traffic có nghĩa là non-branded SEO chưa đủ mạnh.','Đầu tư vào non-branded content marketing: pillar pages, topic clusters, link building từ external sites.'));
+  else
+    checks.push(item('ok','Brand vs Organic','Tỷ lệ branded/non-branded cân bằng (branded ~'+brandedPct+'%)','Traffic đang đến từ cả branded và non-branded queries.',''));
+
+  // ════════════════════════════════════
+  // 9. PAGE DEPTH — are deep pages ranking?
+  // ════════════════════════════════════
+  const deepPages = pages.filter(r => (r.keys[0]||'').split('/').length > 5);
+  if(deepPages.length > 3)
+    checks.push(item('info','Architecture',deepPages.length+' trang "deep" đang nhận traffic','Trang nằm sâu trong site structure (>3 levels) đang rank — tốt nhưng cần kiểm tra crawlability.','Đảm bảo các trang này được internal link từ trang authority cao. Max 3 clicks từ homepage.'));
+
+  // ════════════════════════════════════
+  // 10. SEASONAL / TREND CHECK
+  // ════════════════════════════════════
+  const recentImpr = totals.impressions;
+  if(parseInt(seoDateRange) === 28 && recentImpr < 1000)
+    checks.push(item('warning','Visibility','Impressions thấp ('+recentImpr.toLocaleString()+' / 28 ngày)','Ít hơn 1K impressions/28 ngày cho thấy crawl/index chưa đủ hoặc nội dung chưa match demand.','Check Index Coverage trong GSC. Submit sitemap. Tăng crawl frequency bằng cách update content thường xuyên.'));
+
+  // ════════════════════════════════════
+  // RENDER
+  // ════════════════════════════════════
+  const severityOrder = {'critical':0,'warning':1,'info':2,'ok':3};
+  checks.sort((a,b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+  const icons = { critical:'🔴', warning:'🟡', ok:'🟢', info:'🔵' };
+  const labels = { critical:'CRITICAL', warning:'WARNING', ok:'OK', info:'INFO' };
+  const colors = { critical:'#f87171', warning:'#f59e0b', ok:'#4ade80', info:'#60a5fa' };
+  const bgs = { critical:'#7f1d1d18', warning:'#78350f18', ok:'#14532d12', info:'#1e3a5f15' };
+  const borders = { critical:'#f8717133', warning:'#f59e0b33', ok:'#4ade8033', info:'#60a5fa33' };
+
+  const critCount = checks.filter(c=>c.severity==='critical').length;
+  const warnCount = checks.filter(c=>c.severity==='warning').length;
+  const okCount   = checks.filter(c=>c.severity==='ok').length;
+
+  return `
+    <!-- Summary bar -->
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      ${critCount ? `<span style="background:#7f1d1d22;border:1px solid #f8717144;border-radius:6px;padding:5px 12px;font-size:12px;color:#f87171;font-weight:600">🔴 ${critCount} Critical</span>` : ''}
+      ${warnCount ? `<span style="background:#78350f22;border:1px solid #f59e0b44;border-radius:6px;padding:5px 12px;font-size:12px;color:#f59e0b;font-weight:600">🟡 ${warnCount} Warning</span>` : ''}
+      ${okCount ? `<span style="background:#14532d18;border:1px solid #4ade8033;border-radius:6px;padding:5px 12px;font-size:12px;color:#4ade80;font-weight:600">🟢 ${okCount} OK</span>` : ''}
+    </div>
+    <!-- Checklist items -->
+    <div style="display:flex;flex-direction:column;gap:6px">
+    ${checks.map(c => `
+      <div style="display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;background:${bgs[c.severity]};border:1px solid ${borders[c.severity]};border-radius:8px;padding:11px 14px">
+        <div style="display:flex;align-items:center;gap:6px;min-width:160px">
+          <span style="font-size:14px">${icons[c.severity]}</span>
+          <div>
+            <div style="font-size:9px;font-weight:700;color:${colors[c.severity]};letter-spacing:.06em">${labels[c.severity]} · ${c.category}</div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--text);margin-top:1px">${c.title}</div>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:var(--text3);line-height:1.6">${c.detail}</div>
+        ${c.action ? `<div style="font-size:11px;color:var(--text2);background:var(--surface3);border-radius:5px;padding:6px 10px;min-width:200px;max-width:260px;line-height:1.6"><strong style="color:var(--text);display:block;margin-bottom:2px">→ Action</strong>${c.action}</div>` : '<div></div>'}
+      </div>`).join('')}
+    </div>`;
 }
 
 // Close GSC modal on overlay click
