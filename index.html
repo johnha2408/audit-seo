@@ -330,6 +330,50 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
 .il-sugg-row:hover{background:var(--surface2)}
 .il-del-btn{width:22px;height:22px;border-radius:4px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .12s}
 .il-del-btn:hover{background:#ef444422;color:#f87171}
+/* ── SEO OPTIMIZER PAGE ── */
+.seo-page{padding:0}
+.seo-header{padding:20px 24px 0}
+.seo-title{font-size:17px;font-weight:700}
+.seo-sub{font-size:12px;color:var(--text3);margin-top:3px}
+.seo-connect-card{margin:20px 24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px}
+.seo-connect-icon{font-size:32px;margin-bottom:10px}
+.seo-setup-steps{margin-top:12px;display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text3)}
+.seo-setup-steps li{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:6px;list-style:none}
+.seo-setup-steps .step-num{background:var(--gdim);color:var(--green);border:1px solid var(--gborder);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:1px}
+.seo-setup-steps a{color:var(--green)}
+/* Date range picker */
+.seo-toolbar{display:flex;align-items:center;gap:10px;padding:14px 24px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.date-range-btn{display:flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 12px;font-size:12px;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s}
+.date-range-btn:hover,.date-range-btn.active{border-color:var(--green);color:var(--green);background:var(--gdim)}
+.seo-site-select{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:inherit;font-size:12px;padding:6px 10px;outline:none;cursor:pointer}
+.seo-site-select:focus{border-color:var(--green)}
+/* Metric cards */
+.seo-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+.seo-metric{background:var(--surface);padding:16px 20px}
+.seo-metric-num{font-size:24px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.seo-metric-label{font-size:10.5px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.seo-metric-delta{font-size:11px;margin-top:4px}
+.delta-up{color:#22c55e}.delta-down{color:#ef4444}.delta-flat{color:var(--text3)}
+/* Tables */
+.seo-section{padding:16px 24px}
+.seo-section-title{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.seo-table{width:100%;border-collapse:collapse;font-size:12px}
+.seo-table th{text-align:left;padding:8px 12px;border-bottom:2px solid var(--border);color:var(--text3);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.seo-table td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--text2)}
+.seo-table tr:hover td{background:var(--surface2)}
+.seo-table .num{font-family:'JetBrains Mono',monospace;text-align:right}
+/* Issues */
+.issue-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:8px;margin-bottom:6px;font-size:12px}
+.issue-critical{background:#7f1d1d22;border:1px solid #7f1d1d44}
+.issue-warning{background:#78350f22;border:1px solid #78350f44}
+.issue-info{background:#1e3a5f22;border:1px solid #1e3a5f44}
+.issue-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.issue-title{font-weight:600;margin-bottom:2px}
+.issue-title.critical{color:#f87171}.issue-title.warning{color:#f59e0b}.issue-title.info{color:#60a5fa}
+.issue-desc{color:var(--text3);line-height:1.6}
+/* GSC config input */
+.gsc-inp{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:12.5px;padding:9px 12px;outline:none;transition:border-color .15s;margin-top:6px}
+.gsc-inp:focus{border-color:var(--green)}
 /* Scanning animation */
 .il-scanning{display:flex;align-items:center;gap:10px;padding:16px 20px;background:#1d4ed815;border-bottom:1px solid #1d4ed833;font-size:12.5px;color:#60a5fa}
 .il-prog-wrap{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
@@ -395,7 +439,7 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
       <div class="t-tab" id="tab-articles">Bài viết <span class="t-cnt" id="tb-art-cnt">0</span></div>
       <div class="t-tab" id="tab-il" onclick="showView('il')">Liên kết nội bộ <span class="t-cnt" id="tb-il-cnt">0</span></div>
       <div class="t-tab">Knowledge Base</div>
-      <div class="t-tab">SEO Optimizer</div>
+      <div class="t-tab" id="tab-seo-opt" onclick="showView('seo')">SEO Optimizer</div>
     </div>
     <div class="topbar-actions">
       <button class="btn-green" onclick="openModal()">
@@ -541,6 +585,38 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
       <button class="btn-submit" id="aaSubmitBtn" onclick="submitAddAnchor()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
         <span id="aaSubmitLabel">Thêm & Áp dụng</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- GSC CONFIG MODAL -->
+<div class="modal-ov" id="gscModal">
+  <div class="modal" style="max-width:560px">
+    <div class="m-header">
+      <div class="m-title">🔍 Kết nối Google Search Console</div>
+      <div class="m-close" onclick="closeGSCModal()">✕</div>
+    </div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.7">
+      Để kết nối GSC, bạn cần tạo OAuth Client ID từ Google Cloud Console. Làm theo các bước sau:
+    </p>
+    <ol class="seo-setup-steps">
+      <li><span class="step-num">1</span><div>Vào <a href="https://console.cloud.google.com/apis/credentials" target="_blank">console.cloud.google.com/apis/credentials</a> → Tạo project mới hoặc chọn project có sẵn</div></li>
+      <li><span class="step-num">2</span><div>Enable <strong style="color:var(--text2)">Search Console API</strong>: <a href="https://console.cloud.google.com/apis/library/webmasters.googleapis.com" target="_blank">bấm vào đây</a> → Enable</div></li>
+      <li><span class="step-num">3</span><div>Tạo OAuth Client ID: Credentials → Create Credentials → OAuth client ID → <strong style="color:var(--text2)">Web application</strong></div></li>
+      <li><span class="step-num">4</span><div>Authorized JavaScript origins: thêm URL deploy của bạn (VD: <code style="background:var(--surface3);padding:1px 5px;border-radius:3px" id="currentOriginHint"></code>)</div></li>
+      <li><span class="step-num">5</span><div>Copy <strong style="color:var(--text2)">Client ID</strong> và dán vào ô bên dưới (không cần Client Secret)</div></li>
+    </ol>
+    <div style="margin-top:16px">
+      <label style="font-size:12px;font-weight:600;color:var(--text2)">Google OAuth Client ID <span class="req">*</span></label>
+      <input class="gsc-inp" id="gscClientId" placeholder="xxxx.apps.googleusercontent.com">
+      <div style="font-size:10.5px;color:var(--text3);margin-top:5px">Client ID được lưu trong localStorage, không gửi đi đâu ngoài Google.</div>
+    </div>
+    <div class="m-footer">
+      <button class="btn-cancel" onclick="closeGSCModal()">Hủy</button>
+      <button class="btn-submit" onclick="saveGSCConfig()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Lưu & Đăng nhập Google
       </button>
     </div>
   </div>
@@ -1138,6 +1214,9 @@ function showView(view){
   } else if(view==='il'){
     document.getElementById('tab-il').classList.add('active');
     renderILPage();
+  } else if(view==='seo'){
+    document.getElementById('tab-seo-opt').classList.add('active');
+    renderSEOPage();
   }
 }
 
@@ -2168,6 +2247,390 @@ function deleteSugg(postId, idx){
   localStorage.setItem('genseo_il', JSON.stringify(ilData));
   renderILResults();
 }
+
+// ── SEO OPTIMIZER / GSC ──────────────────────────────────────
+let gscToken = null;
+let gscSiteUrl = null;
+let seoDateRange = '28'; // days
+let seoData = null;
+
+function getGSCClientId(){ return localStorage.getItem('genseo_gsc_client_id')||''; }
+function saveGSCConfig(){
+  const id = document.getElementById('gscClientId').value.trim();
+  if(!id){ toast('Nhập Google Client ID','err'); return; }
+  localStorage.setItem('genseo_gsc_client_id', id);
+  closeGSCModal();
+  startGSCOAuth(id);
+}
+function closeGSCModal(){ document.getElementById('gscModal').classList.remove('show'); }
+function openGSCModal(){
+  const el = document.getElementById('gscClientId');
+  if(el) el.value = getGSCClientId();
+  const hint = document.getElementById('currentOriginHint');
+  if(hint) hint.textContent = window.location.origin;
+  document.getElementById('gscModal').classList.add('show');
+}
+
+function startGSCOAuth(clientId){
+  const cid = clientId || getGSCClientId();
+  if(!cid){ toast('Cần Client ID Google','err'); openGSCModal(); return; }
+  const scope = 'https://www.googleapis.com/auth/webmasters.readonly';
+  const redirectUri = window.location.origin + window.location.pathname;
+  const state = 'gsc_' + Date.now();
+  localStorage.setItem('gsc_oauth_state', state);
+  const url = 'https://accounts.google.com/o/oauth2/v2/auth'
+    + '?client_id=' + encodeURIComponent(cid)
+    + '&redirect_uri=' + encodeURIComponent(redirectUri)
+    + '&response_type=token'
+    + '&scope=' + encodeURIComponent(scope)
+    + '&state=' + state
+    + '&include_granted_scopes=true';
+  window.location.href = url;
+}
+
+// Handle OAuth redirect — check hash on load
+function handleGSCOAuthCallback(){
+  const hash = window.location.hash;
+  if(!hash || !hash.includes('access_token')) return;
+  const params = new URLSearchParams(hash.substring(1));
+  const token = params.get('access_token');
+  const state = params.get('state');
+  const savedState = localStorage.getItem('gsc_oauth_state');
+  if(!token) return;
+  if(state && savedState && state !== savedState){ toast('OAuth state mismatch','err'); return; }
+  gscToken = token;
+  localStorage.setItem('gsc_token', token);
+  localStorage.setItem('gsc_token_expiry', Date.now() + 3500*1000);
+  // Clean URL
+  history.replaceState(null, '', window.location.pathname);
+  toast('✓ Kết nối Google Search Console thành công!','ok');
+  // Auto-navigate to SEO tab
+  showView('seo');
+}
+
+function loadGSCToken(){
+  const t = localStorage.getItem('gsc_token');
+  const exp = parseInt(localStorage.getItem('gsc_token_expiry')||'0');
+  if(t && Date.now() < exp){ gscToken = t; return true; }
+  gscToken = null;
+  return false;
+}
+
+function disconnectGSC(){
+  gscToken = null; gscSiteUrl = null; seoData = null;
+  localStorage.removeItem('gsc_token');
+  localStorage.removeItem('gsc_token_expiry');
+  localStorage.removeItem('gsc_site_url');
+  renderSEOPage();
+  toast('Đã ngắt kết nối GSC','ok');
+}
+
+async function fetchGSC(endpoint, body){
+  if(!gscToken) throw new Error('No token');
+  const r = await fetch('https://www.googleapis.com/webmasters/v3/' + endpoint, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'Authorization': 'Bearer ' + gscToken, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if(r.status === 401){ gscToken = null; localStorage.removeItem('gsc_token'); throw new Error('Token expired'); }
+  if(!r.ok) throw new Error('GSC API error ' + r.status);
+  return r.json();
+}
+
+function renderSEOPage(){
+  const isConnected = loadGSCToken();
+  document.getElementById('content').innerHTML = `
+    <div class="seo-page">
+      <div class="seo-header" style="display:flex;align-items:flex-start;justify-content:space-between;padding:16px 24px 0">
+        <div>
+          <div class="seo-title">SEO Optimizer</div>
+          <div class="seo-sub">Phân tích dữ liệu từ Google Search Console — traffic, queries, issues</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${isConnected && gscSiteUrl ? `
+            <span style="font-size:11px;color:var(--green)">● ${gscSiteUrl.replace(/https?:\/\//,'').replace(/\/$/,'')}</span>
+            <button class="btn-outline" onclick="disconnectGSC()" style="font-size:11px">Ngắt kết nối</button>
+          ` : `
+            <button class="btn-green" onclick="${getGSCClientId() ? 'startGSCOAuth()' : 'openGSCModal()'}">
+              🔍 Kết nối Google Search Console
+            </button>
+          `}
+        </div>
+      </div>
+      <div id="seoBody"></div>
+    </div>`;
+
+  if(!isConnected){
+    renderSEOIntro();
+  } else {
+    loadSEOData();
+  }
+}
+
+function renderSEOIntro(){
+  document.getElementById('seoBody').innerHTML = `
+    <div style="padding:20px 24px">
+      <div class="seo-connect-card">
+        <div class="seo-connect-icon">🔍</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px">Kết nối Google Search Console</div>
+        <div style="font-size:12.5px;color:var(--text3);margin-bottom:16px;line-height:1.7">
+          Kết nối với GSC để xem toàn bộ dữ liệu SEO: clicks, impressions, CTR, ranking, top queries,
+          top pages, coverage issues và các lỗi cần sửa.
+        </div>
+        <button class="btn-green" onclick="${getGSCClientId() ? 'startGSCOAuth()' : 'openGSCModal()'}">
+          🔍 ${getGSCClientId() ? 'Đăng nhập Google' : 'Bắt đầu kết nối'}
+        </button>
+        ${getGSCClientId() ? '' : `
+        <div style="margin-top:16px;font-size:12px;color:var(--text3)">
+          Cần tạo Google OAuth Client ID một lần duy nhất.
+          <span style="color:var(--green);cursor:pointer" onclick="openGSCModal()">Xem hướng dẫn →</span>
+        </div>`}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:4px">
+        ${[
+          ['📊','Traffic Overview','Clicks, impressions, CTR, average position theo thời gian'],
+          ['🔎','Top Queries','Các từ khóa đang mang traffic về website'],
+          ['📄','Top Pages','Các trang có performance tốt nhất'],
+          ['⚠️','Coverage Issues','Lỗi index, noindex, crawl errors cần sửa'],
+          ['📅','Date Range','Tùy chọn: 7, 28, 90 ngày hoặc custom'],
+          ['🌐','Multi-site','Quản lý nhiều property trong 1 tài khoản GSC']
+        ].map(([icon,title,desc])=>`
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:20px;margin-bottom:6px">${icon}</div>
+            <div style="font-size:12.5px;font-weight:600;margin-bottom:4px">${title}</div>
+            <div style="font-size:11px;color:var(--text3)">${desc}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+async function loadSEOData(){
+  const body = document.getElementById('seoBody');
+  body.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:20px 24px;color:#60a5fa;font-size:13px"><div class="spin" style="border-top-color:#60a5fa;border-color:#1d4ed855"></div>Đang tải dữ liệu từ Google Search Console...</div>`;
+
+  try {
+    // 1. Get site list
+    const sites = await fetchGSC('sites');
+    const siteList = sites.siteEntry || [];
+    if(!siteList.length) throw new Error('Không tìm thấy website nào trong GSC. Hãy thêm và verify website tại Search Console.');
+
+    // Set default site
+    if(!gscSiteUrl){
+      gscSiteUrl = localStorage.getItem('gsc_site_url') || siteList[0].siteUrl;
+    }
+    localStorage.setItem('gsc_site_url', gscSiteUrl);
+
+    // 2. Date range
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - parseInt(seoDateRange));
+    const fmt = d => d.toISOString().split('T')[0];
+
+    // 3. Fetch overview metrics
+    const overviewReq = { startDate: fmt(startDate), endDate: fmt(endDate), dimensions: ['date'], rowLimit: 500 };
+    const queryReq = { startDate: fmt(startDate), endDate: fmt(endDate), dimensions: ['query'], rowLimit: 20, orderBy: [{ fieldName: 'clicks', sortOrder: 'DESCENDING' }] };
+    const pageReq = { startDate: fmt(startDate), endDate: fmt(endDate), dimensions: ['page'], rowLimit: 20, orderBy: [{ fieldName: 'clicks', sortOrder: 'DESCENDING' }] };
+
+    const siteEnc = encodeURIComponent(gscSiteUrl);
+    const [overview, queries, pages] = await Promise.all([
+      fetchGSC('sites/' + siteEnc + '/searchAnalytics/query', overviewReq),
+      fetchGSC('sites/' + siteEnc + '/searchAnalytics/query', queryReq),
+      fetchGSC('sites/' + siteEnc + '/searchAnalytics/query', pageReq),
+    ]);
+
+    seoData = { sites: siteList, overview: overview.rows||[], queries: queries.rows||[], pages: pages.rows||[] };
+    renderSEODashboard(siteList);
+
+  } catch(e){
+    body.innerHTML = `
+      <div style="padding:20px 24px">
+        <div style="background:#7f1d1d22;border:1px solid #7f1d1d44;border-radius:8px;padding:14px;font-size:13px;color:#f87171;margin-bottom:12px">
+          ✗ ${e.message}
+        </div>
+        ${e.message.includes('Token') || e.message.includes('expired') ? `
+          <button class="btn-green" onclick="startGSCOAuth()">🔄 Đăng nhập lại Google</button>
+        ` : ''}
+      </div>`;
+  }
+}
+
+function renderSEODashboard(siteList){
+  if(!seoData) return;
+  const { overview, queries, pages } = seoData;
+
+  // Aggregate metrics
+  const totals = overview.reduce((a,r)=>({
+    clicks: a.clicks+(r.clicks||0),
+    impressions: a.impressions+(r.impressions||0),
+    ctr: 0, position: 0, count: a.count+1,
+    sumCtr: a.sumCtr+(r.ctr||0),
+    sumPos: a.sumPos+(r.position||0)
+  }),{clicks:0,impressions:0,ctr:0,position:0,count:0,sumCtr:0,sumPos:0});
+  totals.ctr = totals.count ? (totals.sumCtr/totals.count*100).toFixed(1) : 0;
+  totals.position = totals.count ? (totals.sumPos/totals.count).toFixed(1) : 0;
+
+  const fmtNum = n => n >= 1000 ? (n/1000).toFixed(1)+'K' : n.toString();
+
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - parseInt(seoDateRange));
+  const fmt = d => d.toISOString().split('T')[0];
+
+  document.getElementById('seoBody').innerHTML = `
+    <!-- Toolbar -->
+    <div class="seo-toolbar">
+      <select class="seo-site-select" onchange="gscSiteUrl=this.value;localStorage.setItem('gsc_site_url',this.value);loadSEOData()">
+        ${siteList.map(s=>`<option value="${s.siteUrl}" ${s.siteUrl===gscSiteUrl?'selected':''}>${s.siteUrl.replace(/https?:\/\//,'')}</option>`).join('')}
+      </select>
+      <div style="display:flex;gap:4px;margin-left:auto">
+        ${['7','28','90','180'].map(d=>`
+          <button class="date-range-btn ${seoDateRange===d?'active':''}" onclick="seoDateRange='${d}';loadSEOData()">
+            ${d} ngày
+          </button>`).join('')}
+      </div>
+      <button class="btn-outline" style="font-size:11.5px" onclick="loadSEOData()">🔄 Refresh</button>
+    </div>
+
+    <!-- Metrics -->
+    <div class="seo-metrics">
+      <div class="seo-metric">
+        <div class="seo-metric-num" style="color:var(--green)">${fmtNum(totals.clicks)}</div>
+        <div class="seo-metric-label">Total Clicks</div>
+        <div class="seo-metric-delta delta-flat">${seoDateRange} ngày qua</div>
+      </div>
+      <div class="seo-metric">
+        <div class="seo-metric-num" style="color:#60a5fa">${fmtNum(totals.impressions)}</div>
+        <div class="seo-metric-label">Impressions</div>
+        <div class="seo-metric-delta delta-flat">${seoDateRange} ngày qua</div>
+      </div>
+      <div class="seo-metric">
+        <div class="seo-metric-num" style="color:#a855f7">${totals.ctr}%</div>
+        <div class="seo-metric-label">Avg CTR</div>
+        <div class="seo-metric-delta delta-flat">click-through rate</div>
+      </div>
+      <div class="seo-metric">
+        <div class="seo-metric-num" style="color:#f97316">${totals.position}</div>
+        <div class="seo-metric-label">Avg Position</div>
+        <div class="seo-metric-delta ${parseFloat(totals.position)<10?'delta-up':'delta-flat'}">${parseFloat(totals.position)<10?'✓ Top 10':'Cần cải thiện'}</div>
+      </div>
+    </div>
+
+    <!-- Issues section -->
+    <div class="seo-section">
+      <div class="seo-section-title">⚠️ Phân tích Issues</div>
+      <div id="seoIssues">
+        ${generateSEOIssues(queries, pages, totals)}
+      </div>
+    </div>
+
+    <!-- Two columns: queries + pages -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border)">
+      <!-- Top Queries -->
+      <div class="seo-section" style="border-right:1px solid var(--border)">
+        <div class="seo-section-title">🔎 Top Queries <span style="font-size:11px;color:var(--text3);font-weight:400">(${seoDateRange} ngày)</span></div>
+        <table class="seo-table">
+          <thead><tr>
+            <th>Query</th>
+            <th class="num">Clicks</th>
+            <th class="num">Impr.</th>
+            <th class="num">CTR</th>
+            <th class="num">Pos.</th>
+          </tr></thead>
+          <tbody>
+            ${queries.slice(0,15).map(r=>`
+              <tr>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.keys[0]}">${r.keys[0]}</td>
+                <td class="num">${r.clicks}</td>
+                <td class="num">${fmtNum(r.impressions)}</td>
+                <td class="num">${(r.ctr*100).toFixed(1)}%</td>
+                <td class="num" style="color:${r.position<=3?'var(--green)':r.position<=10?'#f59e0b':'var(--text3)'}">${r.position.toFixed(1)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Top Pages -->
+      <div class="seo-section">
+        <div class="seo-section-title">📄 Top Pages <span style="font-size:11px;color:var(--text3);font-weight:400">(${seoDateRange} ngày)</span></div>
+        <table class="seo-table">
+          <thead><tr>
+            <th>Page</th>
+            <th class="num">Clicks</th>
+            <th class="num">Impr.</th>
+            <th class="num">CTR</th>
+            <th class="num">Pos.</th>
+          </tr></thead>
+          <tbody>
+            ${pages.slice(0,15).map(r=>{
+              const slug = r.keys[0].replace(/^https?:\/\/[^\/]+/,'').substring(0,40)||'/';
+              return `<tr>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.keys[0]}">
+                  <a href="${r.keys[0]}" target="_blank" style="color:var(--text2);text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">${slug}</a>
+                </td>
+                <td class="num">${r.clicks}</td>
+                <td class="num">${fmtNum(r.impressions)}</td>
+                <td class="num">${(r.ctr*100).toFixed(1)}%</td>
+                <td class="num" style="color:${r.position<=3?'var(--green)':r.position<=10?'#f59e0b':'var(--text3)'}">${r.position.toFixed(1)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function generateSEOIssues(queries, pages, totals){
+  const issues = [];
+
+  // Low CTR
+  if(parseFloat(totals.ctr) < 3){
+    issues.push({type:'critical', icon:'🔴', title:'CTR thấp ('+totals.ctr+'%)', desc:'CTR dưới 3% cho thấy title/meta description chưa hấp dẫn. Cần tối ưu lại title tag và meta description cho các trang có nhiều impressions.'});
+  }
+
+  // Bad position
+  if(parseFloat(totals.position) > 20){
+    issues.push({type:'warning', icon:'🟡', title:'Thứ hạng trung bình thấp (pos. '+totals.position+')', desc:'Thứ hạng >20 nghĩa là phần lớn trang không xuất hiện trên trang 1. Ưu tiên tối ưu nội dung cho các trang có impressions cao nhưng vị trí thấp.'});
+  }
+
+  // Queries with high impressions but low clicks
+  const highImpLowCtr = queries.filter(r => r.impressions > 100 && r.ctr < 0.02);
+  if(highImpLowCtr.length > 3){
+    issues.push({type:'warning', icon:'🟡', title:`${highImpLowCtr.length} queries có impressions cao nhưng CTR thấp`, desc:`Các query như "${highImpLowCtr[0]?.keys[0]}", "${highImpLowCtr[1]?.keys[0]||''}" xuất hiện nhiều nhưng ít người click. Cần cải thiện title/description cho các trang rank cho query này.`});
+  }
+
+  // Pages stuck on page 2 (position 11-20)
+  const page2 = queries.filter(r => r.position > 10 && r.position <= 20 && r.impressions > 50);
+  if(page2.length > 0){
+    issues.push({type:'info', icon:'🔵', title:`${page2.length} queries đang ở trang 2 (pos. 11-20)`, desc:`Cơ hội "quick win": các query này đang gần top 10. Tối ưu thêm nội dung, internal links và E-E-A-T để đẩy lên trang 1. Ví dụ: "${page2[0]?.keys[0]}"`});
+  }
+
+  // Top page with low CTR
+  const lowCtrPage = pages.filter(r => r.impressions > 200 && r.ctr < 0.01);
+  if(lowCtrPage.length > 0){
+    issues.push({type:'warning', icon:'🟡', title:`${lowCtrPage.length} trang có CTR cực thấp (<1%)`, desc:`Trang "${lowCtrPage[0]?.keys[0].replace(/^https?:\/\/[^\/]+/,'')}" và ${lowCtrPage.length-1} trang khác có rất nhiều impressions nhưng gần như không ai click. Ưu tiên cập nhật title và meta description.`});
+  }
+
+  if(!issues.length){
+    issues.push({type:'info', icon:'✅', title:'Không phát hiện lỗi nghiêm trọng', desc:'Website đang hoạt động tốt trong khoảng thời gian được chọn. Tiếp tục theo dõi và tối ưu các trang có position từ 5-15 để cải thiện thêm.'});
+  }
+
+  return issues.map(i=>`
+    <div class="issue-item issue-${i.type}">
+      <span class="issue-icon">${i.icon}</span>
+      <div>
+        <div class="issue-title ${i.type}">${i.title}</div>
+        <div class="issue-desc">${i.desc}</div>
+      </div>
+    </div>`).join('');
+}
+
+// Close GSC modal on overlay click
+document.getElementById('gscModal').addEventListener('click',e=>{ if(e.target.id==='gscModal') closeGSCModal(); });
+
+// Handle OAuth callback on page load
+handleGSCOAuthCallback();
 
 // ── IL SETTINGS ──
 function getILSettings(){ return JSON.parse(localStorage.getItem('genseo_il_settings')||'{"maxLinks":5}'); }
