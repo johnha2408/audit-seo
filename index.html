@@ -251,7 +251,14 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
 .il-stat-lbl{font-size:10.5px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
 
 /* Filter bar */
-.il-filters{display:flex;align-items:center;gap:6px;padding:12px 20px;border-bottom:1px solid var(--border)}
+.il-filters{display:flex;align-items:center;gap:6px;padding:10px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.il-search-wrap{position:relative;flex:1;min-width:200px;max-width:320px}
+.il-search-inp{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:12px;padding:6px 10px 6px 30px;outline:none;transition:border-color .15s}
+.il-search-inp:focus{border-color:var(--green)}
+.il-search-inp::placeholder{color:var(--text3)}
+.il-search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:12px;pointer-events:none}
+.il-search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text3);cursor:pointer;font-size:14px;background:none;border:none;line-height:1;padding:0;display:none}
+.il-search-clear.show{display:block}
 .il-filter-btn{padding:5px 14px;border-radius:20px;font-size:12px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--text2);transition:all .15s;font-family:inherit}
 .il-filter-btn:hover{color:var(--text)}
 .il-filter-btn.active{background:var(--gdim);border-color:var(--gborder);color:var(--green);font-weight:600}
@@ -1403,7 +1410,10 @@ async function startScan(){
             }
           }
           if(parsed){
-            const suggs = parsed.suggestions||{};
+            const rawSuggs = parsed.suggestions||{};
+            // Normalize: đổi tất cả numeric keys → string để khớp với postId lookup
+            const suggs = {};
+            Object.entries(rawSuggs).forEach(([k,v]) => { suggs[String(k)] = v; });
             const n = Object.keys(suggs).length;
             Object.assign(allSuggestions, suggs);
             addLog("✓ Batch "+(bi+1)+": "+n+" bài có gợi ý");
@@ -1429,9 +1439,12 @@ async function startScan(){
     addLog(`✓ Hoàn thành: ${totalSugg} gợi ý cho ${Object.keys(allSuggestions).length}/${posts.length} bài`);
 
     const elapsed = Date.now()-t0;
+    // Normalize tất cả keys trong allSuggestions → string
+    const normalizedSuggs = {};
+    Object.entries(allSuggestions).forEach(([k,v]) => { normalizedSuggs[String(k)] = v; });
     ilData = {
       posts,
-      suggestions: allSuggestions,
+      suggestions: normalizedSuggs,
       applied: {},
       scannedAt: new Date().toISOString(),
       stats:{ total:posts.length, withSugg:Object.keys(allSuggestions).length, totalSugg, elapsed }
@@ -1453,6 +1466,7 @@ async function startScan(){
 
 // ── RENDER RESULTS ──
 let ilFilter = 'all'; // 'all'|'new'|'applied'
+let ilSearch = ''; // search query
 
 function renderILResults(){
   if(!ilData) return;
@@ -1462,6 +1476,18 @@ function renderILResults(){
   const appliedIds = allPostIds.filter(id=>applied[id]);
 
   let showIds = ilFilter==='all' ? allPostIds : ilFilter==='new' ? newIds : appliedIds;
+  // Apply search filter
+  if(ilSearch.trim()){
+    const q = ilSearch.toLowerCase().trim();
+    showIds = showIds.filter(id => {
+      const post = posts.find(p=>String(p.id)===String(id));
+      if(!post) return String(id).includes(q);
+      const titleMatch = (post.title?.rendered||'').toLowerCase().includes(q);
+      const urlMatch = (post.link||'').toLowerCase().includes(q);
+      const anchorMatch = (suggestions[id]||[]).some(s=>s.anchor.toLowerCase().includes(q));
+      return titleMatch || urlMatch || anchorMatch;
+    });
+  }
 
   const el = document.getElementById('ilBody');
   el.innerHTML = `
@@ -1475,6 +1501,11 @@ function renderILResults(){
       <button class="il-filter-btn ${ilFilter==='all'?'active':''}" onclick="setILFilter('all')">Tất cả (${allPostIds.length})</button>
       <button class="il-filter-btn ${ilFilter==='new'?'active':''}" onclick="setILFilter('new')">Gợi ý mới (${newIds.length})</button>
       <button class="il-filter-btn ${ilFilter==='applied'?'active':''}" onclick="setILFilter('applied')">Đã áp dụng (${appliedIds.length})</button>
+      <div class="il-search-wrap">
+        <span class="il-search-icon">🔍</span>
+        <input class="il-search-inp" id="ilSearchInp" placeholder="Tìm bài theo tiêu đề, URL, anchor..." value="${ilSearch}" oninput="onILSearch(this.value)">
+        <button class="il-search-clear ${ilSearch?'show':''}" onclick="clearILSearch()">×</button>
+      </div>
       <div class="il-bulk">
         <label class="il-check-all">
           <input type="checkbox" id="ilCheckAll" onchange="toggleCheckAll(this)">
@@ -1486,7 +1517,10 @@ function renderILResults(){
       </div>
     </div>
     <div id="ilPostList">
-      ${showIds.map(id=>renderPostRow(id)).join('')}
+      ${showIds.length > 0
+        ? showIds.map(id=>renderPostRow(id)).join('')
+        : '<div class="empty" style="padding:40px 20px"><div class="icon">🔍</div><p>Không tìm thấy bài nào khớp với "<strong>'+ilSearch+'</strong>"</p><p style="margin-top:6px;font-size:11.5px">Thử tìm theo tiêu đề, URL hoặc anchor text</p></div>'
+      }
     </div>`;
 }
 
@@ -1494,7 +1528,7 @@ function renderPostRow(postId){
   const { suggestions, applied } = ilData;
   const suggs = suggestions[postId]||[];
   const isApplied = !!applied[postId];
-  const post = ilData.posts.find(p=>p.id==postId)||{};
+  const post = ilData.posts.find(p=>String(p.id)===String(postId))||{};
   const title = post.title?.rendered || `Bài ${postId}`;
   const url = post.link||'';
   const mainAnchor = suggs[0]?.anchor||'';
@@ -1549,6 +1583,22 @@ function renderPostRow(postId){
 }
 
 function setILFilter(f){ ilFilter=f; renderILResults(); }
+
+function onILSearch(val){
+  ilSearch = val;
+  // Debounce 200ms
+  clearTimeout(window._ilSearchTimer);
+  window._ilSearchTimer = setTimeout(()=>renderILResults(), 200);
+  const clearBtn = document.getElementById('ilSearchInp')?.parentElement?.querySelector('.il-search-clear');
+  if(clearBtn) clearBtn.classList.toggle('show', !!val);
+}
+
+function clearILSearch(){
+  ilSearch = '';
+  const inp = document.getElementById('ilSearchInp');
+  if(inp){ inp.value=''; inp.focus(); }
+  renderILResults();
+}
 
 function toggleCheckAll(cb){
   document.querySelectorAll('.il-cb').forEach(c=>c.checked=cb.checked);
