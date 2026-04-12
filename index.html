@@ -1471,11 +1471,19 @@ let ilSearch = ''; // search query
 function renderILResults(){
   if(!ilData) return;
   const { posts, suggestions, applied, stats } = ilData;
+  // allPostIds = bài có gợi ý; zeroIds = bài được quét nhưng AI không tạo gợi ý
   const allPostIds = Object.keys(suggestions);
   const newIds = allPostIds.filter(id=>!applied[id]);
   const appliedIds = allPostIds.filter(id=>applied[id]);
+  // Bài 0 gợi ý: có trong posts nhưng không có trong suggestions
+  const postIdsWithSugg = new Set(allPostIds.map(String));
+  const zeroIds = posts.map(p=>String(p.id)).filter(id=>!postIdsWithSugg.has(id));
 
-  let showIds = ilFilter==='all' ? allPostIds : ilFilter==='new' ? newIds : appliedIds;
+  let showIds;
+  if(ilFilter==='all') showIds = [...allPostIds, ...zeroIds];
+  else if(ilFilter==='new') showIds = newIds;
+  else if(ilFilter==='applied') showIds = appliedIds;
+  else showIds = zeroIds; // 'zero'
   // Apply search filter
   if(ilSearch.trim()){
     const q = ilSearch.toLowerCase().trim();
@@ -1498,9 +1506,10 @@ function renderILResults(){
       <div class="il-stat"><div class="il-stat-num" style="font-size:16px">${stats.elapsed?Math.round(stats.elapsed)+'ms':'—'}</div><div class="il-stat-lbl">Thời gian quét</div></div>
     </div>
     <div class="il-filters">
-      <button class="il-filter-btn ${ilFilter==='all'?'active':''}" onclick="setILFilter('all')">Tất cả (${allPostIds.length})</button>
+      <button class="il-filter-btn ${ilFilter==='all'?'active':''}" onclick="setILFilter('all')">Tất cả (${posts.length})</button>
       <button class="il-filter-btn ${ilFilter==='new'?'active':''}" onclick="setILFilter('new')">Gợi ý mới (${newIds.length})</button>
       <button class="il-filter-btn ${ilFilter==='applied'?'active':''}" onclick="setILFilter('applied')">Đã áp dụng (${appliedIds.length})</button>
+      <button class="il-filter-btn ${ilFilter==='zero'?'active':''}" onclick="setILFilter('zero')" ${zeroIds.length?'':'style="display:none"'}>Chưa có gợi ý (${zeroIds.length})</button>
       <div class="il-search-wrap">
         <span class="il-search-icon">🔍</span>
         <input class="il-search-inp" id="ilSearchInp" placeholder="Tìm bài theo tiêu đề, URL, anchor..." value="${ilSearch}" oninput="onILSearch(this.value)">
@@ -1573,11 +1582,22 @@ function renderPostRow(postId){
         </div>
       </div>
       <div class="il-sugg-table">
+        ${suggs.length > 0 ? `
         <div class="il-sugg-header">
           <div class="il-sugg-col">Anchor Text</div>
           <div class="il-sugg-col">Bài viết đích</div>
+          <div class="il-sugg-col" style="width:28px"></div>
         </div>
-        ${suggsHTML}
+        ${suggsHTML}` : `
+        <div style="padding:12px 20px 4px 52px;font-size:12px;color:var(--text3)">
+          AI không tìm thấy gợi ý phù hợp — thêm anchor thủ công bên dưới.
+        </div>`}
+        <div style="padding:8px 20px 10px 52px;border-top:1px solid var(--border)">
+          <button class="btn-add" style="font-size:11.5px;color:var(--green);border-color:var(--gborder)"
+            onclick="openAAModal('${postId}')">
+            + Thêm anchor thủ công
+          </button>
+        </div>
       </div>
     </div>`;
 }
