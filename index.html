@@ -1250,8 +1250,7 @@ async function startScan(){
       addLog(`→ Batch ${bi+1}/${batches.length}: phân tích ${batch.length} bài`);
 
       // Tạo summary ngắn gọn cho cả site (để biết context)
-      const allTitles = posts.map(p=>`${p.id}: ${(p.title?.rendered||'').substring(0,60)}`).join('
-');
+      const allTitles = posts.map(p=>`${p.id}: ${(p.title?.rendered||'').substring(0,60)}`).join('\n');
       const batchDetail = batch.map(p=>({
         id: p.id,
         title: p.title?.rendered||'',
@@ -1259,19 +1258,20 @@ async function startScan(){
         excerpt: (p.excerpt?.rendered||'').replace(/<[^>]+>/g,'').substring(0,100)
       }));
 
-      const prompt = `Bạn là SEO expert. Gợi ý internal links cho ${batch.length} bài viết bên dưới.
-
-TẤT CẢ bài trên website (để chọn bài đích phù hợp):
-${allTitles}
-
-Phân tích ${batch.length} bài này và gợi ý link đến các bài phù hợp trong danh sách trên:
-${batchDetail.map(p=>`ID:${p.id} | "${p.title}" | ${p.excerpt}`).join('
-')}
-
-Trả về JSON thuần (không markdown):
-{"suggestions":{"<post_id>": [{"anchor":"<anchor text>","target_id":<id>,"target_title":"<tiêu đề>","target_url":"<url>"}]}}
-
-Quy tắc: tối đa ${maxLinks} link/bài, anchor tự nhiên, không link bài với chính nó, chỉ JSON.`;
+      const prompt = [
+        'Bạn là SEO expert. Gợi ý internal links cho '+batch.length+' bài viết bên dưới.',
+        '',
+        'TẤT CẢ bài trên website (để chọn bài đích phù hợp):',
+        posts.map(p=>p.id+': '+(p.title?.rendered||'').substring(0,60)).join('\n'),
+        '',
+        'Phân tích '+batch.length+' bài này và gợi ý link đến các bài phù hợp trong danh sách trên:',
+        batchDetail.map(p=>'ID:'+p.id+' | "'+( p.title||'')+'" | '+(p.excerpt||'')).join('\n'),
+        '',
+        'Trả về JSON thuần (không markdown):',
+        '{"suggestions":{"<post_id>": [{"anchor":"<anchor text>","target_id":<id>,"target_title":"<tiêu đề>","target_url":"<url>"}]}}',
+        '',
+        'Quy tắc: tối đa '+maxLinks+' link/bài, anchor tự nhiên, không link bài với chính nó, chỉ JSON.'
+      ].join('\n');
 
       try {
         const txt = await callAI(prompt, 2000);
