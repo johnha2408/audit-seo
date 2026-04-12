@@ -1160,44 +1160,67 @@ async function startScan(){
   const cfg = getWpConfig();
   if(!cfg){ toast('Chưa kết nối WordPress — vui lòng nhập thông tin','err'); openWpModal(); return; }
   const apiKey = getApiKey();
-  if(!apiKey){ toast('Cần Anthropic API Key','err'); openSettings(); return; }
+  if(!apiKey){ toast('Cần OpenRouter API Key','err'); openSettings(); return; }
 
-  // Show scanning UI
   document.getElementById('ilBody').innerHTML = `
     <div class="il-scanning" id="ilScanStatus">
       <div class="spin"></div>
       <div style="flex:1">
         <div id="ilScanMsg">Đang tải danh sách bài viết từ WordPress...</div>
         <div class="il-prog-wrap" style="margin-top:6px">
-          <div class="il-prog-inner" id="ilProg" style="width:5%"></div>
+          <div class="il-prog-inner" id="ilProg" style="width:2%"></div>
         </div>
       </div>
       <div id="ilScanPct" style="font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--green)">0%</div>
     </div>
-    <div id="ilScanLog" style="padding:16px 20px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text3);max-height:200px;overflow-y:auto"></div>`;
+    <div id="ilScanLog" style="padding:16px 20px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text3);max-height:240px;overflow-y:auto"></div>`;
 
   const t0 = Date.now();
   function setProgress(pct, msg){
     const p=document.getElementById('ilProg'); if(p)p.style.width=pct+'%';
     const m=document.getElementById('ilScanMsg'); if(m)m.textContent=msg;
-    const pc=document.getElementById('ilScanPct'); if(pc)pc.textContent=pct+'%';
+    const pc=document.getElementById('ilScanPct'); if(pc)pc.textContent=Math.round(pct)+'%';
   }
   function addLog(msg){
     const el=document.getElementById('ilScanLog');
     if(el){ el.innerHTML+=`<div>${msg}</div>`; el.scrollTop=el.scrollHeight; }
   }
 
+  // ── AI call với retry + delay ──
+  async function callAI(prompt, maxTok=2000, retries=3){
+    for(let i=0; i<retries; i++){
+      if(i>0){
+        const wait = 3000 * i;
+        addLog(`⏳ Rate limit — chờ ${wait/1000}s rồi thử lại...`);
+        await new Promise(r=>setTimeout(r, wait));
+      }
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
+        body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct:free',max_tokens:maxTok,messages:[{role:'user',content:prompt}]})
+      });
+      if(r.status===429){
+        addLog(`⚠ 429 Too Many Requests (lần ${i+1}/${retries})`);
+        continue;
+      }
+      if(!r.ok){ const e=await r.json(); throw new Error(e.error?.message||'API error '+r.status); }
+      const d = await r.json();
+      return d.choices?.[0]?.message?.content||'';
+    }
+    throw new Error('Vượt quá rate limit. Thử lại sau vài phút.');
+  }
+
   try {
-    // Step 1: Fetch all published posts from WP
-    setProgress(10, 'Đang tải danh sách bài viết từ WordPress...');
+    // Step 1: Fetch posts
+    setProgress(5, 'Đang tải bài viết từ WordPress...');
     addLog('→ GET /wp-json/wp/v2/posts?per_page=100&status=publish');
     let posts = [];
     let page = 1;
     while(true){
-      const r = await fetch(`${cfg.url}/wp-json/wp/v2/posts?per_page=100&page=${page}&status=publish&_fields=id,title,link,content,excerpt`, {
+      const r = await fetch(`${cfg.url}/wp-json/wp/v2/posts?per_page=100&page=${page}&status=publish&_fields=id,title,link,excerpt`,{
         headers:{'Authorization':'Basic '+btoa(cfg.user+':'+cfg.pass)}
       });
-      if(!r.ok) throw new Error('WP API lỗi '+r.status+': '+r.statusText);
+      if(!r.ok) throw new Error('WP API lỗi '+r.status+': Kiểm tra URL và credentials');
       const batch = await r.json();
       if(!batch.length) break;
       posts = posts.concat(batch);
@@ -1208,76 +1231,98 @@ async function startScan(){
     }
     if(posts.length < 2) throw new Error('Cần ít nhất 2 bài đã publish trên WordPress');
     addLog(`✓ Tải xong ${posts.length} bài viết`);
-    setProgress(30, `Đã tải ${posts.length} bài. AI đang phân tích keyword...`);
 
-    // Step 2: AI analyze all posts and suggest internal links
-    const postSummaries = posts.map(p=>({
-      id: p.id,
-      title: p.title?.rendered||'',
-      url: p.link||'',
-      excerpt: (p.excerpt?.rendered||'').replace(/<[^>]+>/g,'').substring(0,200)
-    }));
+    // Step 2: Chunk posts thành batch nhỏ để tránh rate limit
+    const BATCH_SIZE = 20; // Mỗi batch 20 bài, tránh prompt quá dài
+    const batches = [];
+    for(let i=0; i<posts.length; i+=BATCH_SIZE){
+      batches.push(posts.slice(i, i+BATCH_SIZE));
+    }
+    addLog(`→ Phân thành ${batches.length} batch × ${BATCH_SIZE} bài`);
 
-    addLog(`→ Gửi ${posts.length} bài lên Claude để phân tích...`);
-    setProgress(50, 'AI đang phân tích và tạo gợi ý liên kết...');
-
+    const allSuggestions = {};
     const maxLinks = getILSettings().maxLinks;
-    const prompt = `Bạn là chuyên gia SEO. Phân tích danh sách bài viết sau và gợi ý internal links giữa các bài.
 
-Danh sách bài viết (${posts.length} bài):
-${postSummaries.map(p=>`ID:${p.id} | "${p.title}" | ${p.url}\nMô tả: ${p.excerpt}`).join('\n\n')}
+    for(let bi=0; bi<batches.length; bi++){
+      const batch = batches[bi];
+      const pct = 30 + (bi/batches.length)*60;
+      setProgress(pct, `Batch ${bi+1}/${batches.length}: AI đang phân tích ${batch.length} bài...`);
+      addLog(`→ Batch ${bi+1}/${batches.length}: phân tích ${batch.length} bài`);
 
-Quy tắc:
-- Mỗi bài tối đa ${maxLinks} gợi ý link
-- Chỉ gợi ý khi nội dung thực sự liên quan (không link lung tung)
-- Anchor text phải tự nhiên, là keyword/cụm từ có trong bài nguồn
-- Không link bài với chính nó
-- Ưu tiên pillar page nhận nhiều link từ cluster
+      // Tạo summary ngắn gọn cho cả site (để biết context)
+      const allTitles = posts.map(p=>`${p.id}: ${(p.title?.rendered||'').substring(0,60)}`).join('
+');
+      const batchDetail = batch.map(p=>({
+        id: p.id,
+        title: p.title?.rendered||'',
+        url: p.link||'',
+        excerpt: (p.excerpt?.rendered||'').replace(/<[^>]+>/g,'').substring(0,100)
+      }));
 
-Trả về JSON THUẦN TÚY:
-{
-  "suggestions": {
-    "<post_id_nguon>": [
-      {"anchor": "<cụm từ anchor>", "target_id": <post_id_đích>, "target_title": "<tiêu đề đích>", "target_url": "<url đích>"}
-    ]
-  }
-}
+      const prompt = `Bạn là SEO expert. Gợi ý internal links cho ${batch.length} bài viết bên dưới.
 
-Chỉ JSON, không giải thích.`;
+TẤT CẢ bài trên website (để chọn bài đích phù hợp):
+${allTitles}
 
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
-      body:JSON.stringify({model:'google/gemma-3-27b-it:free',max_tokens:4000,messages:[{role:'user',content:prompt}]})
-    });
-    if(!res.ok){ const e=await res.json(); throw new Error('OpenRouter API: '+e.error?.message); }
-    const aiData = await res.json();
-    const txt = aiData.choices?.[0]?.message?.content||'';
-    const clean = txt.replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(clean);
+Phân tích ${batch.length} bài này và gợi ý link đến các bài phù hợp trong danh sách trên:
+${batchDetail.map(p=>`ID:${p.id} | "${p.title}" | ${p.excerpt}`).join('
+')}
 
-    setProgress(85, 'Đang tổng hợp kết quả...');
-    const suggestions = parsed.suggestions||{};
-    const totalSugg = Object.values(suggestions).reduce((a,v)=>a+v.length,0);
-    addLog(`✓ AI tạo ${totalSugg} gợi ý cho ${Object.keys(suggestions).length} bài`);
+Trả về JSON thuần (không markdown):
+{"suggestions":{"<post_id>": [{"anchor":"<anchor text>","target_id":<id>,"target_title":"<tiêu đề>","target_url":"<url>"}]}}
 
-    // Save to state
+Quy tắc: tối đa ${maxLinks} link/bài, anchor tự nhiên, không link bài với chính nó, chỉ JSON.`;
+
+      try {
+        const txt = await callAI(prompt, 2000);
+        const clean = txt.replace(/```json|```/g,'').trim();
+        // Tìm JSON trong response
+        const jsonMatch = clean.match(/\{[\s\S]*\}/);
+        if(jsonMatch){
+          const parsed = JSON.parse(jsonMatch[0]);
+          const suggs = parsed.suggestions||{};
+          Object.assign(allSuggestions, suggs);
+          addLog(`✓ Batch ${bi+1}: ${Object.keys(suggs).length} bài có gợi ý`);
+        } else {
+          addLog(`⚠ Batch ${bi+1}: không parse được JSON, bỏ qua`);
+        }
+      } catch(batchErr){
+        addLog(`⚠ Batch ${bi+1} lỗi: ${batchErr.message} — bỏ qua, tiếp tục`);
+      }
+
+      // Delay giữa các batch để tránh rate limit
+      if(bi < batches.length-1){
+        addLog(`⏳ Nghỉ 2s trước batch tiếp theo...`);
+        await new Promise(r=>setTimeout(r,2000));
+      }
+    }
+
+    setProgress(95, 'Tổng hợp kết quả...');
+    const totalSugg = Object.values(allSuggestions).reduce((a,v)=>a+v.length,0);
+    addLog(`✓ Hoàn thành: ${totalSugg} gợi ý cho ${Object.keys(allSuggestions).length}/${posts.length} bài`);
+
     const elapsed = Date.now()-t0;
-    ilData = { posts, suggestions, applied:{}, scannedAt: new Date().toISOString(), stats:{ total:posts.length, withSugg: Object.keys(suggestions).length, totalSugg, elapsed } };
+    ilData = {
+      posts,
+      suggestions: allSuggestions,
+      applied: {},
+      scannedAt: new Date().toISOString(),
+      stats:{ total:posts.length, withSugg:Object.keys(allSuggestions).length, totalSugg, elapsed }
+    };
     localStorage.setItem('genseo_il', JSON.stringify(ilData));
     updateILCount();
-
     setProgress(100, 'Hoàn thành!');
-    addLog(`✓ Quét xong trong ${elapsed}ms`);
-    setTimeout(()=>{ renderILPage(); }, 600);
-    toast(`Quét xong! ${totalSugg} gợi ý link cho ${Object.keys(suggestions).length} bài`,'ok');
+    addLog(`✓ Quét xong trong ${(elapsed/1000).toFixed(1)}s`);
+    setTimeout(()=>renderILPage(), 800);
+    toast(`Quét xong! ${totalSugg} gợi ý cho ${Object.keys(allSuggestions).length} bài`,'ok');
 
   } catch(e){
     toast('Lỗi: '+e.message,'err');
-    const m=document.getElementById('ilScanMsg'); if(m)m.textContent='Lỗi: '+e.message;
+    const m=document.getElementById('ilScanMsg'); if(m)m.textContent='✗ Lỗi: '+e.message;
     addLog('✗ Lỗi: '+e.message);
   }
 }
+
 
 // ── RENDER RESULTS ──
 let ilFilter = 'all'; // 'all'|'new'|'applied'
