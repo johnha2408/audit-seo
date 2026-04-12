@@ -2428,19 +2428,43 @@ async function loadSEOData(){
     startDate.setDate(endDate.getDate() - parseInt(seoDateRange));
     const fmt = d => d.toISOString().split('T')[0];
 
-    // 3. Fetch overview metrics
-    const overviewReq = { startDate: fmt(startDate), endDate: fmt(endDate), dimensions: ['date'], rowLimit: 500 };
-    const queryReq = { startDate: fmt(startDate), endDate: fmt(endDate), dimensions: ['query'], rowLimit: 20, orderBy: [{ fieldName: 'clicks', sortOrder: 'DESCENDING' }] };
-    const pageReq = { startDate: fmt(startDate), endDate: fmt(endDate), dimensions: ['page'], rowLimit: 20, orderBy: [{ fieldName: 'clicks', sortOrder: 'DESCENDING' }] };
+    // 3. Date range previous period (for comparison)
+    const prevEnd = new Date(startDate); prevEnd.setDate(prevEnd.getDate()-1);
+    const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - parseInt(seoDateRange));
 
+    // 4. Fetch all data in parallel
     const siteEnc = encodeURIComponent(gscSiteUrl);
-    const [overview, queries, pages] = await Promise.all([
-      fetchGSC('sites/' + siteEnc + '/searchAnalytics/query', overviewReq),
-      fetchGSC('sites/' + siteEnc + '/searchAnalytics/query', queryReq),
-      fetchGSC('sites/' + siteEnc + '/searchAnalytics/query', pageReq),
+    const makeReq = (dims, limit, orderField) => ({
+      startDate: fmt(startDate), endDate: fmt(endDate),
+      dimensions: dims, rowLimit: limit||25,
+      ...(orderField ? {orderBy:[{fieldName:orderField,sortOrder:'DESCENDING'}]} : {})
+    });
+    const makePrevReq = (dims, limit, orderField) => ({
+      startDate: fmt(prevStart), endDate: fmt(prevEnd),
+      dimensions: dims, rowLimit: limit||25,
+      ...(orderField ? {orderBy:[{fieldName:orderField,sortOrder:'DESCENDING'}]} : {})
+    });
+
+    body.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:20px 24px;color:#60a5fa;font-size:13px"><div class="spin" style="border-top-color:#60a5fa;border-color:#1d4ed855"></div>Đang tải dữ liệu GSC (6 requests)...</div>`;
+
+    const [overview, queries, queriesImpr, pages, devices, prevOverview] = await Promise.all([
+      fetchGSC('sites/'+siteEnc+'/searchAnalytics/query', makeReq(['date'],500)),
+      fetchGSC('sites/'+siteEnc+'/searchAnalytics/query', makeReq(['query'],25,'clicks')),
+      fetchGSC('sites/'+siteEnc+'/searchAnalytics/query', makeReq(['query'],100,'impressions')),
+      fetchGSC('sites/'+siteEnc+'/searchAnalytics/query', makeReq(['page'],25,'clicks')),
+      fetchGSC('sites/'+siteEnc+'/searchAnalytics/query', makeReq(['device'],5)),
+      fetchGSC('sites/'+siteEnc+'/searchAnalytics/query', makePrevReq(['date'],500)),
     ]);
 
-    seoData = { sites: siteList, overview: overview.rows||[], queries: queries.rows||[], pages: pages.rows||[] };
+    seoData = {
+      sites: siteList,
+      overview: overview.rows||[],
+      prevOverview: prevOverview.rows||[],
+      queries: queries.rows||[],
+      queriesImpr: queriesImpr.rows||[],
+      pages: pages.rows||[],
+      devices: devices.rows||[],
+    };
     renderSEODashboard(siteList);
 
   } catch(e){
@@ -2456,133 +2480,255 @@ async function loadSEOData(){
   }
 }
 
+let seoActiveTab = 'overview';
+let seoQueryFilter = '';
+let seoDrillPage = null;
+let seoDrillQuery = null;
+
 function renderSEODashboard(siteList){
   if(!seoData) return;
-  const { overview, queries, pages } = seoData;
+  const { overview, prevOverview, queries, queriesImpr, pages, devices } = seoData;
 
-  // Aggregate metrics
-  const totals = overview.reduce((a,r)=>({
-    clicks: a.clicks+(r.clicks||0),
-    impressions: a.impressions+(r.impressions||0),
-    ctr: 0, position: 0, count: a.count+1,
-    sumCtr: a.sumCtr+(r.ctr||0),
-    sumPos: a.sumPos+(r.position||0)
-  }),{clicks:0,impressions:0,ctr:0,position:0,count:0,sumCtr:0,sumPos:0});
-  totals.ctr = totals.count ? (totals.sumCtr/totals.count*100).toFixed(1) : 0;
-  totals.position = totals.count ? (totals.sumPos/totals.count).toFixed(1) : 0;
+  const aggRows = rows => rows.reduce((a,r)=>({
+    clicks:a.clicks+(r.clicks||0), impressions:a.impressions+(r.impressions||0),
+    sumCtr:a.sumCtr+(r.ctr||0), sumPos:a.sumPos+(r.position||0), n:a.n+1
+  }),{clicks:0,impressions:0,sumCtr:0,sumPos:0,n:0});
 
-  const fmtNum = n => n >= 1000 ? (n/1000).toFixed(1)+'K' : n.toString();
+  const cur = aggRows(overview);
+  const prv = aggRows(prevOverview||[]);
+  const totals = {
+    clicks:cur.clicks, impressions:cur.impressions,
+    ctr: cur.n?(cur.sumCtr/cur.n*100).toFixed(1):0,
+    position: cur.n?(cur.sumPos/cur.n).toFixed(1):0
+  };
+  const fmtNum = n => n>=1000000?(n/1000000).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'K':String(n);
+  const delta = (c,p) => {
+    if(!p||p===0) return '';
+    const pct = ((c-p)/p*100).toFixed(0);
+    if(pct>0) return '<span class="delta-up">▲'+pct+'%</span>';
+    if(pct<0) return '<span class="delta-down">▼'+Math.abs(pct)+'%</span>';
+    return '<span class="delta-flat">→0%</span>';
+  };
 
-  const endDate = new Date();
-  const startDate = new Date();
+  const tabs = [
+    ['overview','📊 Overview'],['queries','🔎 Queries'],['pages','📄 Pages'],
+    ['opportunities','💡 Opportunities'],['checklist','📋 Checklist'],['devices','📱 Devices']
+  ];
+
+  document.getElementById('seoBody').innerHTML =
+    '<div class="seo-toolbar">'
+    +'<select class="seo-site-select" onchange="gscSiteUrl=this.value;localStorage.setItem(\'gsc_site_url\',this.value);loadSEOData()">'
+    +siteList.map(s=>'<option value="'+s.siteUrl+'" '+(s.siteUrl===gscSiteUrl?'selected':'')+'>'+s.siteUrl.replace(/https?:\/\//,'')+'</option>').join('')
+    +'</select>'
+    +'<div style="display:flex;gap:4px">'
+    +['7','28','90','180'].map(d=>'<button class="date-range-btn '+(seoDateRange===d?'active':'')+'" onclick="seoDateRange=\''+d+'\';loadSEOData()">'+d+'d</button>').join('')
+    +'</div>'
+    +'<span style="font-size:11px;color:var(--text3)">vs prev: '+delta(cur.clicks,prv.clicks)+' clicks</span>'
+    +'<button class="btn-outline" style="font-size:11px;margin-left:auto" onclick="loadSEOData()">🔄</button>'
+    +'</div>'
+    +'<div class="seo-metrics">'
+    +'<div class="seo-metric"><div class="seo-metric-num" style="color:var(--green)">'+fmtNum(totals.clicks)+'</div><div class="seo-metric-label">Clicks</div><div class="seo-metric-delta">'+delta(cur.clicks,prv.clicks)+' vs prev</div></div>'
+    +'<div class="seo-metric"><div class="seo-metric-num" style="color:#60a5fa">'+fmtNum(totals.impressions)+'</div><div class="seo-metric-label">Impressions</div><div class="seo-metric-delta">'+delta(cur.impressions,prv.impressions)+' vs prev</div></div>'
+    +'<div class="seo-metric"><div class="seo-metric-num" style="color:#a855f7">'+totals.ctr+'%</div><div class="seo-metric-label">Avg CTR</div><div class="seo-metric-delta">&nbsp;</div></div>'
+    +'<div class="seo-metric"><div class="seo-metric-num" style="color:#f97316">'+totals.position+'</div><div class="seo-metric-label">Avg Position</div>'
+    +'<div class="seo-metric-delta '+(parseFloat(totals.position)<=10?'delta-up':'delta-flat')+'">'+(parseFloat(totals.position)<=3?'🏆 Top 3':parseFloat(totals.position)<=10?'✓ Top 10':parseFloat(totals.position)<=20?'Trang 2':'Trang 3+')+'</div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);padding:0 12px;overflow-x:auto">'
+    +tabs.map(t=>'<button id="seotab-'+t[0]+'" class="t-tab '+(seoActiveTab===t[0]?'active':'')+'" onclick="seoActiveTab=\''+t[0]+'\';renderSEOTabContent(\''+t[0]+'\')" style="font-size:12px;padding:10px 14px;white-space:nowrap">'+t[1]+'</button>').join('')
+    +'</div>'
+    +'<div id="seoTabContent" style="min-height:300px"></div>';
+
+  renderSEOTabContent(seoActiveTab);
+}
+
+function buildQueryTable(rows, isPageMode){
+  const fmtNum = n => n>=1000?(n/1000).toFixed(1)+'K':String(n);
+  if(!rows||!rows.length) return '<div style="padding:20px;color:var(--text3);font-size:12px;text-align:center">Không có dữ liệu</div>';
+  return '<table class="seo-table"><thead><tr>'
+    +'<th>'+(isPageMode?'Page':'Query')+'</th><th class="num">Clicks</th><th class="num">Impr.</th><th class="num">CTR</th><th class="num">Pos.</th><th class="num">Drill</th>'
+    +'</tr></thead><tbody>'
+    +rows.slice(0,25).map(r=>{
+      const key = r.keys[0]||'';
+      const isPage = key.startsWith('http');
+      const label = isPage ? (key.replace(/^https?:\/\/[^\/]+/,'').substring(0,50)||'/') : key.substring(0,60);
+      const posColor = r.position<=3?'var(--green)':r.position<=10?'#f59e0b':'var(--text3)';
+      const drillFn = isPage ? "drillByPage('"+key.replace(/'/g,"\\'")+"')" : "drillByQuery('"+encodeURIComponent(key)+"')";
+      return '<tr>'
+        +'<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+key+'">'
+        +(isPage?'<a href="'+key+'" target="_blank" style="color:var(--text2);text-decoration:none" onmouseover="this.style.color=\'var(--green)\'" onmouseout="this.style.color=\'var(--text2)\'">'+label+'</a>':label)
+        +'</td>'
+        +'<td class="num">'+r.clicks+'</td>'
+        +'<td class="num">'+fmtNum(r.impressions)+'</td>'
+        +'<td class="num">'+(r.ctr*100).toFixed(1)+'%</td>'
+        +'<td class="num" style="color:'+posColor+'">'+r.position.toFixed(1)+'</td>'
+        +'<td class="num"><button class="il-del-btn" style="width:auto;padding:2px 6px;font-size:10px;color:#60a5fa" onclick="'+drillFn+'">🔍</button></td>'
+        +'</tr>';
+    }).join('')
+    +'</tbody></table>';
+}
+
+function renderSEOTabContent(tab){
+  document.querySelectorAll('[id^="seotab-"]').forEach(b=>b.classList.remove('active'));
+  const btn = document.getElementById('seotab-'+tab);
+  if(btn) btn.classList.add('active');
+
+  const { queries, queriesImpr, pages, devices } = seoData;
+  const fmtNum = n => n>=1000?(n/1000).toFixed(1)+'K':String(n);
+  const el = document.getElementById('seoTabContent');
+
+  if(tab==='overview'){
+    const quickWins = queriesImpr.filter(r=>r.position>10&&r.position<=20&&r.impressions>=20);
+    el.innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border)">'
+      +'<div class="seo-section" style="border-right:1px solid var(--border)">'
+      +'<div class="seo-section-title">🔎 Top Queries</div>'+buildQueryTable(queries.slice(0,10),false)+'</div>'
+      +'<div class="seo-section"><div class="seo-section-title">📄 Top Pages</div>'+buildQueryTable(pages.slice(0,10),true)+'</div>'
+      +'</div>'
+      +'<div class="seo-section">'
+      +'<div class="seo-section-title">💡 Quick Wins — Trang 2 cần push lên Trang 1 '
+      +'<span style="font-size:11px;color:#f59e0b;font-weight:400">(pos. 11-20 · có impressions)</span></div>'
+      +(quickWins.length?buildQueryTable(quickWins.slice(0,8),false):'<div style="padding:12px;font-size:12px;color:var(--green)">✓ Không có query bị kẹt ở trang 2</div>')
+      +'</div>';
+
+  } else if(tab==='queries'){
+    const regexOpts = [
+      ['','Tất cả'],
+      ['^(who|what|when|where|why|how|is|are|do|does|can|will|best|top)\\s','❓ Questions'],
+      ['\\b(vs|versus|compare|best|top|review|alternative)\\b','📊 Comparison'],
+      ['\\b(buy|price|cost|hire|service|agency|near|affordable)\\b','🛒 Commercial'],
+      ['\\b(calgary|edmonton|canada)\\b','📍 Local'],
+    ];
+    const filtered = seoQueryFilter
+      ? queriesImpr.filter(r=>{ try{return new RegExp(seoQueryFilter,'i').test(r.keys[0]||'')}catch(e){return false} })
+      : queriesImpr;
+    el.innerHTML = '<div class="seo-section" style="padding-bottom:0">'
+      +'<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'
+      +regexOpts.map(o=>'<button class="date-range-btn '+(seoQueryFilter===o[0]?'active':'')+'" onclick="seoQueryFilter=\''+o[0].replace(/'/g,"\\'").replace(/\\/g,'\\\\')+"';renderSEOTabContent('queries')\" style=\"font-size:11px\">"+o[1]+'</button>').join('')
+      +'<input class="aa-inp" placeholder="Custom regex..." value="'+seoQueryFilter.replace(/"/g,'&quot;')+'" oninput="seoQueryFilter=this.value;clearTimeout(window._st);window._st=setTimeout(()=>renderSEOTabContent(\'queries\'),300)" style="width:160px;padding:4px 8px;font-size:11px">'
+      +'</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+filtered.length+' queries · sorted by impressions</div></div>'
+      +'<div class="seo-section">'+buildQueryTable(filtered,false)+'</div>';
+
+  } else if(tab==='pages'){
+    if(seoDrillPage){
+      el.innerHTML = '<div style="padding:12px 24px 0;font-size:12px;color:var(--text3)">'
+        +'📄 Queries cho: <strong style="color:var(--text)">'+seoDrillPage.replace(/^https?:\/\/[^\/]+/,'')+'</strong>'
+        +' <button class="btn-outline" style="font-size:10.5px;margin-left:8px" onclick="clearSeoDrill()">✕ Back</button></div>'
+        +'<div id="drillContent" class="seo-section"><div style="color:var(--text3);font-size:12px">Đang tải...</div></div>';
+      loadDrillPage(seoDrillPage);
+    } else {
+      el.innerHTML = '<div class="seo-section"><div class="seo-section-title">📄 All Pages <span style="font-size:11px;color:var(--text3);font-weight:400">— click 🔍 để xem tất cả queries của page đó</span></div>'+buildQueryTable(pages,true)+'</div>';
+    }
+
+  } else if(tab==='opportunities'){
+    const quickWins = queriesImpr.filter(r=>r.position>10&&r.position<=20&&r.impressions>=20);
+    const zeroClick = queriesImpr.filter(r=>r.impressions>=50&&r.clicks===0).slice(0,20);
+    const lowCtrPg = pages.filter(r=>r.impressions>=100&&r.ctr<0.01);
+    el.innerHTML =
+      '<div class="seo-section"><div class="seo-section-title">💡 Quick Wins <span style="font-size:11px;color:#f59e0b;font-weight:400">pos. 11-20 — gần top 10 nhất</span></div>'
+      +(quickWins.length?buildQueryTable(quickWins.slice(0,15),false):'<div style="padding:12px;color:var(--green);font-size:12px">✓ Không có quick wins</div>')+'</div>'
+      +'<div class="seo-section" style="border-top:1px solid var(--border)">'
+      +'<div class="seo-section-title">🎯 Zero-click Opportunities <span style="font-size:11px;color:#f59e0b;font-weight:400">impressions cao, 0 click → rewrite title/meta</span></div>'
+      +(zeroClick.length?buildQueryTable(zeroClick,false):'<div style="padding:12px;color:var(--green);font-size:12px">✓ Không có vấn đề</div>')+'</div>'
+      +'<div class="seo-section" style="border-top:1px solid var(--border)">'
+      +'<div class="seo-section-title">📄 Wasted Impressions <span style="font-size:11px;color:#f87171;font-weight:400">CTR < 1% → ưu tiên update</span></div>'
+      +(lowCtrPg.length?buildQueryTable(lowCtrPg,true):'<div style="padding:12px;color:var(--green);font-size:12px">✓ Không có vấn đề</div>')+'</div>';
+
+  } else if(tab==='checklist'){
+    const cur2 = seoData.overview.reduce((a,r)=>({
+      clicks:a.clicks+(r.clicks||0), impressions:a.impressions+(r.impressions||0),
+      sumCtr:a.sumCtr+(r.ctr||0), sumPos:a.sumPos+(r.position||0), n:a.n+1
+    }),{clicks:0,impressions:0,sumCtr:0,sumPos:0,n:0});
+    const t2 = { clicks:cur2.clicks, impressions:cur2.impressions,
+      ctr: cur2.n?(cur2.sumCtr/cur2.n*100).toFixed(1):0,
+      position: cur2.n?(cur2.sumPos/cur2.n).toFixed(1):0 };
+    el.innerHTML = '<div class="seo-section">'+generateSEOChecklist(queriesImpr, pages, t2)+'</div>';
+
+  } else if(tab==='devices'){
+    el.innerHTML = '<div class="seo-section"><div class="seo-section-title">📱 Traffic by Device</div>'
+      +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+      +devices.map(r=>{
+        const dev = r.keys[0]||'';
+        const icon = dev==='MOBILE'?'📱':dev==='DESKTOP'?'🖥️':'📟';
+        const posColor = r.position<=10?'var(--green)':r.position<=20?'#f59e0b':'#f87171';
+        return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px;min-width:150px">'
+          +'<div style="font-size:20px;margin-bottom:4px">'+icon+'</div>'
+          +'<div style="font-size:13px;font-weight:600">'+dev+'</div>'
+          +'<div style="font-size:11.5px;color:var(--text3);margin-top:6px;line-height:2">'
+          +'Clicks: <strong style="color:var(--green)">'+fmtNum(r.clicks)+'</strong><br>'
+          +'Impr: <strong>'+fmtNum(r.impressions)+'</strong><br>'
+          +'CTR: <strong>'+(r.ctr*100).toFixed(1)+'%</strong><br>'
+          +'Position: <strong style="color:'+posColor+'">'+r.position.toFixed(1)+'</strong>'
+          +'</div></div>';
+      }).join('')
+      +'</div>'
+      +'<div style="font-size:12px;color:var(--text3);padding:12px;background:var(--surface2);border-radius:7px;line-height:1.7">'
+      +'💡 <strong style="color:var(--text2)">Mobile vs Desktop gap:</strong> Nếu Mobile position cao hơn Desktop >3 điểm → vấn đề mobile UX/CWV. '
+      +'Google dùng mobile-first indexing — site phải ngon trên mobile trước.'
+      +'</div></div>';
+  }
+}
+
+async function drillByPage(pageUrl){
+  seoDrillPage = pageUrl; seoDrillQuery = null;
+  seoActiveTab = 'pages';
+  renderSEOTabContent('pages');
+}
+
+async function drillByQuery(encodedQuery){
+  seoDrillQuery = decodeURIComponent(encodedQuery); seoDrillPage = null;
+  const siteEnc = encodeURIComponent(gscSiteUrl);
+  const endDate = new Date(); const startDate = new Date();
   startDate.setDate(endDate.getDate() - parseInt(seoDateRange));
   const fmt = d => d.toISOString().split('T')[0];
-
-  document.getElementById('seoBody').innerHTML = `
-    <!-- Toolbar -->
-    <div class="seo-toolbar">
-      <select class="seo-site-select" onchange="gscSiteUrl=this.value;localStorage.setItem('gsc_site_url',this.value);loadSEOData()">
-        ${siteList.map(s=>`<option value="${s.siteUrl}" ${s.siteUrl===gscSiteUrl?'selected':''}>${s.siteUrl.replace(/https?:\/\//,'')}</option>`).join('')}
-      </select>
-      <div style="display:flex;gap:4px;margin-left:auto">
-        ${['7','28','90','180'].map(d=>`
-          <button class="date-range-btn ${seoDateRange===d?'active':''}" onclick="seoDateRange='${d}';loadSEOData()">
-            ${d} ngày
-          </button>`).join('')}
-      </div>
-      <button class="btn-outline" style="font-size:11.5px" onclick="loadSEOData()">🔄 Refresh</button>
-    </div>
-
-    <!-- Metrics -->
-    <div class="seo-metrics">
-      <div class="seo-metric">
-        <div class="seo-metric-num" style="color:var(--green)">${fmtNum(totals.clicks)}</div>
-        <div class="seo-metric-label">Total Clicks</div>
-        <div class="seo-metric-delta delta-flat">${seoDateRange} ngày qua</div>
-      </div>
-      <div class="seo-metric">
-        <div class="seo-metric-num" style="color:#60a5fa">${fmtNum(totals.impressions)}</div>
-        <div class="seo-metric-label">Impressions</div>
-        <div class="seo-metric-delta delta-flat">${seoDateRange} ngày qua</div>
-      </div>
-      <div class="seo-metric">
-        <div class="seo-metric-num" style="color:#a855f7">${totals.ctr}%</div>
-        <div class="seo-metric-label">Avg CTR</div>
-        <div class="seo-metric-delta delta-flat">click-through rate</div>
-      </div>
-      <div class="seo-metric">
-        <div class="seo-metric-num" style="color:#f97316">${totals.position}</div>
-        <div class="seo-metric-label">Avg Position</div>
-        <div class="seo-metric-delta ${parseFloat(totals.position)<10?'delta-up':'delta-flat'}">${parseFloat(totals.position)<10?'✓ Top 10':'Cần cải thiện'}</div>
-      </div>
-    </div>
-
-    <!-- Full SEO Checklist -->
-    <div class="seo-section">
-      <div class="seo-section-title" style="margin-bottom:14px">
-        📋 SEO Expert Checklist
-        <span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:6px">— phân tích dựa trên dữ liệu GSC thực tế</span>
-      </div>
-      <div id="seoChecklist">
-        ${generateSEOChecklist(queries, pages, totals)}
-      </div>
-    </div>
-
-    <!-- Two columns: queries + pages -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border)">
-      <!-- Top Queries -->
-      <div class="seo-section" style="border-right:1px solid var(--border)">
-        <div class="seo-section-title">🔎 Top Queries <span style="font-size:11px;color:var(--text3);font-weight:400">(${seoDateRange} ngày)</span></div>
-        <table class="seo-table">
-          <thead><tr>
-            <th>Query</th>
-            <th class="num">Clicks</th>
-            <th class="num">Impr.</th>
-            <th class="num">CTR</th>
-            <th class="num">Pos.</th>
-          </tr></thead>
-          <tbody>
-            ${queries.slice(0,15).map(r=>`
-              <tr>
-                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.keys[0]}">${r.keys[0]}</td>
-                <td class="num">${r.clicks}</td>
-                <td class="num">${fmtNum(r.impressions)}</td>
-                <td class="num">${(r.ctr*100).toFixed(1)}%</td>
-                <td class="num" style="color:${r.position<=3?'var(--green)':r.position<=10?'#f59e0b':'var(--text3)'}">${r.position.toFixed(1)}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Top Pages -->
-      <div class="seo-section">
-        <div class="seo-section-title">📄 Top Pages <span style="font-size:11px;color:var(--text3);font-weight:400">(${seoDateRange} ngày)</span></div>
-        <table class="seo-table">
-          <thead><tr>
-            <th>Page</th>
-            <th class="num">Clicks</th>
-            <th class="num">Impr.</th>
-            <th class="num">CTR</th>
-            <th class="num">Pos.</th>
-          </tr></thead>
-          <tbody>
-            ${pages.slice(0,15).map(r=>{
-              const slug = r.keys[0].replace(/^https?:\/\/[^\/]+/,'').substring(0,40)||'/';
-              return `<tr>
-                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.keys[0]}">
-                  <a href="${r.keys[0]}" target="_blank" style="color:var(--text2);text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text2)'">${slug}</a>
-                </td>
-                <td class="num">${r.clicks}</td>
-                <td class="num">${fmtNum(r.impressions)}</td>
-                <td class="num">${(r.ctr*100).toFixed(1)}%</td>
-                <td class="num" style="color:${r.position<=3?'var(--green)':r.position<=10?'#f59e0b':'var(--text3)'}">${r.position.toFixed(1)}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
+  const fmtNum = n => n>=1000?(n/1000).toFixed(1)+'K':String(n);
+  seoActiveTab = 'queries';
+  document.getElementById('seoTabContent').innerHTML = '<div style="padding:20px 24px;color:var(--text3);font-size:12px">Đang tải...</div>';
+  try {
+    const data = await fetchGSC('sites/'+siteEnc+'/searchAnalytics/query', {
+      startDate: fmt(startDate), endDate: fmt(endDate),
+      dimensions: ['page'],
+      dimensionFilterGroups:[{filters:[{dimension:'query',operator:'equals',expression:seoDrillQuery}]}],
+      rowLimit: 20
+    });
+    const rows = data.rows||[];
+    const count = rows.length;
+    const tableHTML = count ? buildQueryTable(rows,true) : '<div style="padding:16px;color:var(--text3);font-size:12px">Không có dữ liệu</div>';
+    document.getElementById('seoTabContent').innerHTML =
+      '<div class="seo-section">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+      +'<button class="btn-outline" style="font-size:10.5px" onclick="clearSeoDrill()">← Back</button>'
+      +'<div class="seo-section-title" style="margin:0">Pages ranking for: <strong style="color:#60a5fa">"'+seoDrillQuery+'"</strong></div>'
+      +'</div>'
+      +(count>=2?'<div style="background:#78350f18;border:1px solid #f59e0b33;border-radius:7px;padding:10px 14px;font-size:12px;margin-bottom:10px">'
+        +'<strong style="color:#f59e0b">⚠ Keyword Cannibalization:</strong> '+count+' trang đang rank cho cùng 1 query. '
+        +'Chọn 1 winner page, canonical hoặc noindex các trang còn lại.</div>':'')
+      +tableHTML+'</div>';
+    document.querySelectorAll('[id^="seotab-"]').forEach(b=>b.classList.remove('active'));
+    const btn = document.getElementById('seotab-queries');
+    if(btn) btn.classList.add('active');
+  } catch(e){ console.error(e); }
 }
+
+async function loadDrillPage(pageUrl){
+  const siteEnc = encodeURIComponent(gscSiteUrl);
+  const endDate = new Date(); const startDate = new Date();
+  startDate.setDate(endDate.getDate() - parseInt(seoDateRange));
+  const fmt = d => d.toISOString().split('T')[0];
+  const fmtNum = n => n>=1000?(n/1000).toFixed(1)+'K':String(n);
+  try {
+    const data = await fetchGSC('sites/'+siteEnc+'/searchAnalytics/query', {
+      startDate: fmt(startDate), endDate: fmt(endDate),
+      dimensions:['query'],
+      dimensionFilterGroups:[{filters:[{dimension:'page',operator:'equals',expression:pageUrl}]}],
+      rowLimit: 50, orderBy:[{fieldName:'impressions',sortOrder:'DESCENDING'}]
+    });
+    const el = document.getElementById('drillContent');
+    if(el) el.innerHTML = buildQueryTable(data.rows||[], false);
+  } catch(e){ console.error(e); }
+}
+
+function clearSeoDrill(){ seoDrillPage=null; seoDrillQuery=null; renderSEOTabContent(seoActiveTab); }
+
 
 function generateSEOChecklist(queries, pages, totals){
   // ── Helper ──
