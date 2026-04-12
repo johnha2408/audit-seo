@@ -1282,11 +1282,12 @@ async function startScan(){
       const batchLines = batchDetail.map(p=>'[ID:'+p.id+'] '+p.title+'\n  excerpt: '+(p.excerpt||'(none)')).join('\n\n');
       const prompt = 'SEO internal linking task. Return ONLY valid compact JSON.\n\n'+
         'STRICT RULES:\n'+
-        '1. anchor MUST be 2-4 words taken verbatim from the source post excerpt/title — NO single words, NO invented phrases\n'+
-        '2. target_url MUST be copied EXACTLY from the target list below — do NOT modify or invent URLs\n'+
-        '3. No self-links (source id != target id)\n'+
-        '4. Max '+maxLinks+' suggestions per post\n'+
-        '5. Only suggest if content is genuinely related\n\n'+
+        '1. anchor MUST be 2-4 words taken verbatim from the source post BODY/EXCERPT only — NOT from the post title or headings\n'+
+        '2. anchor must be 2-4 words minimum — NEVER single words like "art", "big", "guide"\n'+
+        '3. target_url MUST be copied EXACTLY from the target list below — do NOT invent or modify URLs\n'+
+        '4. No self-links (source id != target id)\n'+
+        '5. Max '+maxLinks+' suggestions per post\n'+
+        '6. Only suggest if genuinely semantically related\n\n'+
         'TARGET POSTS (id|title|exact_url):\n'+targetList+'\n\n'+
         'SOURCE POSTS TO ANALYZE:\n'+batchLines+'\n\n'+
         'Output JSON (compact, no whitespace):\n'+
@@ -1502,43 +1503,64 @@ async function applyLinks(postIds){
       const postData = await r.json();
       let content = postData.content?.raw || postData.content?.rendered || '';
 
-      // Inject links — luôn dùng URL thật từ WP posts, không tin URL từ AI
+      // Inject links — verified URL từ WP, không dùng title làm anchor
       const maxLinks = getILSettings().maxLinks;
       let injected = 0;
-      // Build verified URL map từ WP data
       const verifiedUrlMap = {};
       ilData.posts.forEach(p=>{ verifiedUrlMap[p.id] = p.link||''; });
+
+      // Strip HTML tags để lấy plain text body (loại trừ title, headings)
+      // Content raw thường có dạng: <!-- wp:heading --><h2>Title</h2><!-- /wp:heading --><!-- wp:paragraph --><p>body</p>
+      // Loại phần trong <h1>-<h6> và post title để tránh inject vào heading/title
+      const stripHeadings = content.replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, '');
+
       for(const s of suggs){
         if(injected >= maxLinks) break;
-        // Override target_url bằng URL thật từ WP
-        const realUrl = verifiedUrlMap[s.target_id] || s.target_url || '';
+        const realUrl = verifiedUrlMap[s.target_id] || '';
         if(!s.anchor || !realUrl) continue;
-        s._realUrl = realUrl; // lưu lại để dùng bên dưới
-        // Skip nếu anchor đã có link
-        const escAnchor = s.anchor.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-        const alreadyLinked = new RegExp('<a[^>]*>[^<]*'+escAnchor+'[^<]*<\\/a>','i').test(content);
+
+        // FIX 1: Bỏ qua nếu anchor chỉ là 1 từ (SEO không hiệu quả)
+        if(s.anchor.trim().split(/\s+/).length < 2) continue;
+
+        // FIX 2: Bỏ qua nếu anchor KHÔNG xuất hiện trong body (chỉ có trong heading/title)
+        const anchorInBody = stripHeadings.toLowerCase().includes(s.anchor.toLowerCase());
+        if(!anchorInBody) continue;
+
+        // Escape anchor cho regex
+        const escAnchor = s.anchor.replace(/[.+?^${}()|[\]\\]/g,'\\$&');
+
+        // FIX 3: Skip nếu anchor này đã được wrap trong <a> tag rồi
+        const alreadyLinked = new RegExp('<a[^>]*>[^<]*'+escAnchor+'[^<]*<\/a>','i').test(content);
         if(alreadyLinked) continue;
-        // Tìm TẤT CẢ vị trí của anchor trong content
-        const reAll = new RegExp('(?<![\">])\\b('+escAnchor+')\\b(?![^<]*<\\/a>)','gi');
+
+        // FIX 4: Tìm tất cả matches TRONG BODY (không phải heading)
+        // Dùng content gốc để inject nhưng kiểm tra vị trí dựa trên stripHeadings
+        const reAll = new RegExp('(?<![\">])\\b('+escAnchor+')\\b(?![^<]*<\/a>)','gi');
         const allMatches = [];
         let m;
-        while((m = reAll.exec(content)) !== null){ allMatches.push(m.index); }
+        while((m = reAll.exec(content)) !== null){
+          // Kiểm tra match này không nằm trong heading tag
+          const before200 = content.substring(Math.max(0, m.index-200), m.index);
+          const isInHeading = /<h[1-6][^>]*>[^<]*$/.test(before200);
+          if(!isInHeading) allMatches.push(m.index);
+        }
         if(!allMatches.length) continue;
-        // Chọn vị trí ở GIỮA hoặc CUỐI bài (bỏ qua 20% đầu bài)
-        const skipFront = Math.floor(content.length * 0.20);
-        const goodMatches = allMatches.filter(idx => idx > skipFront);
+
+        // FIX 5: Dàn đều — bỏ qua 15% đầu bài, ưu tiên vị trí giữa
+        const skip = Math.floor(content.length * 0.15);
+        const goodMatches = allMatches.filter(idx => idx > skip);
         const targetIdx = goodMatches.length > 0
-          ? goodMatches[Math.floor(goodMatches.length / 2)] // lấy match giữa bài
-          : allMatches[allMatches.length - 1]; // fallback: match cuối cùng
-        // Thay thế đúng 1 occurrence tại targetIdx
-        let replaced = false;
-        const before = content;
+          ? goodMatches[Math.floor(goodMatches.length / 2)]
+          : allMatches[allMatches.length - 1];
+
+        // FIX 6: Inject với target="_blank" rel="noopener"
+        const beforeInject = content;
         content = content.slice(0, targetIdx) +
           content.slice(targetIdx).replace(
             new RegExp('\\b('+escAnchor+')\\b','i'),
-            '<a href="'+s._realUrl+'">$1</a>'
+            '<a href="'+realUrl+'" target="_blank" rel="noopener noreferrer">$1</a>'
           );
-        if(content !== before) injected++;
+        if(content !== beforeInject) injected++;
       }
 
       if(injected === 0){ ok++; ilData.applied[postId]='skipped'; continue; }
