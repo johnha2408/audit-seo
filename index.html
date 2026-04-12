@@ -465,11 +465,24 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
     <div class="form-grp">
       <label class="form-lbl">OpenRouter API Key <span class="req">*</span></label>
       <input class="form-inp" id="apiKeyInput" type="password" placeholder="sk-or-v1-...">
-      <div class="form-hint">Key được lưu trong localStorage. Lấy key miễn phí tại openrouter.ai/keys</div>
+      <div class="form-hint">Key được lưu trong localStorage. Lấy key tại <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--green)">openrouter.ai/keys</a></div>
+    </div>
+    <div class="form-grp" style="margin-top:14px">
+      <label class="form-lbl">Model AI <span class="hint">— dùng paid model nếu có credit</span></label>
+      <select class="form-inp" id="aiModelSelect" style="cursor:pointer" onchange="updateModelHint(this.value)">
+        <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3 (paid — khuyến nghị, có credit)</option>
+        <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 (paid)</option>
+        <option value="google/gemma-3-27b-it">Google Gemma 3 27B (paid)</option>
+        <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (paid)</option>
+        <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (FREE — rate limit thấp)</option>
+        <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (FREE — rate limit thấp)</option>
+        <option value="openrouter/free">OpenRouter Auto Free</option>
+      </select>
+      <div class="form-hint" id="modelHint" style="color:#f59e0b">⚠ Paid models dùng credit OpenRouter. Free models có rate limit 20 req/phút.</div>
     </div>
     <div class="m-footer">
       <button class="btn-cancel" onclick="closeSettings()">Hủy</button>
-      <button class="btn-submit" onclick="saveApiKey()">💾 Lưu API Key</button>
+      <button class="btn-submit" onclick="saveApiKey()">💾 Lưu cài đặt</button>
     </div>
   </div>
 </div>
@@ -673,15 +686,36 @@ function selRadio(el,val){
 // ── SETTINGS ──
 function openSettings(){
   document.getElementById('apiKeyInput').value = getApiKey();
+  const modelSel = document.getElementById('aiModelSelect');
+  if(modelSel){
+    modelSel.value = getAIModel();
+    updateModelHint(modelSel.value);
+  }
   document.getElementById('settingsModal').classList.add('show');
 }
+
+function updateModelHint(val){
+  const hint = document.getElementById('modelHint');
+  if(!hint) return;
+  if(val.includes(':free') || val === 'openrouter/free'){
+    hint.style.color = '#f59e0b';
+    hint.textContent = '⚠ Free model: rate limit ~20 req/phút. Dễ bị 429 khi apply nhiều bài.';
+  } else {
+    hint.style.color = 'var(--green)';
+    hint.textContent = '✓ Paid model: dùng credit OpenRouter, không bị rate limit free tier.';
+  }
+}
 function closeSettings(){ document.getElementById('settingsModal').classList.remove('show'); }
+function getAIModel(){ return localStorage.getItem('genseo_ai_model') || 'deepseek/deepseek-chat-v3-0324'; }
+
 function saveApiKey(){
   const k = document.getElementById('apiKeyInput').value.trim();
   if(!k){ toast('Nhập API Key đi bạn','err'); return; }
   localStorage.setItem('genseo_api_key', k);
+  const model = document.getElementById('aiModelSelect')?.value;
+  if(model) localStorage.setItem('genseo_ai_model', model);
   closeSettings();
-  toast('Đã lưu API Key ✓','ok');
+  toast('Đã lưu cài đặt ✓','ok');
 }
 
 // ── CREATE PLAN ──
@@ -759,7 +793,7 @@ Quy tắc: 4-7 cluster, pillar là head term volume cao, cluster là long-tail c
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
-      body: JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free',max_tokens:4000,messages:[{role:'user',content:prompt}]})
+      body: JSON.stringify({model:getAIModel(),max_tokens:4000,messages:[{role:'user',content:prompt}]})
     });
     if(!res.ok){ const err=await res.json(); throw new Error(err.error?.message||'API error '+res.status); }
     const data = await res.json();
@@ -1049,7 +1083,7 @@ Tiếng Việt, ngắn gọn thực tế.`;
     const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
-      body:JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+      body:JSON.stringify({model:getAIModel(),max_tokens:1000,messages:[{role:'user',content:prompt}]})
     });
     if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||'API error'); }
     const data=await res.json();
@@ -1275,12 +1309,13 @@ async function startScan(){
   }
 
   // ── AI call với retry + fallback models ──
+  // Model list: ưu tiên paid models (dùng credit, không bị free rate limit)
   const FREE_MODELS = [
-    'deepseek/deepseek-v3.2',
-    'deepseek/deepseek-chat-v3-0324:free',
-    'google/gemma-3-27b-it:free',
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'openrouter/free'
+    getAIModel(),                            // user-selected model
+    'deepseek/deepseek-v3.2',               // paid fallback
+    'google/gemma-3-27b-it',                // paid fallback
+    'meta-llama/llama-3.3-70b-instruct',    // paid fallback
+    'meta-llama/llama-3.3-70b-instruct:free' // free cuối cùng nếu hết credit
   ];
   async function callAI(prompt, maxTok=4000){
     for(let mi=0; mi<FREE_MODELS.length; mi++){
@@ -1714,7 +1749,7 @@ async function applyLinks(postIds){
     // Retry với backoff khi gặp 429
     for(let attempt=0; attempt<3; attempt++){
       if(attempt > 0){
-        const wait = attempt * 5000;
+        const wait = attempt * 2000; // paid model: ít 429 hơn, chờ ngắn hơn
         toast('Rate limit — chờ '+Math.round(wait/1000)+'s rồi thử lại...','ok');
         await new Promise(r=>setTimeout(r, wait));
       }
@@ -1722,7 +1757,7 @@ async function applyLinks(postIds){
         const aiResp = await fetch('https://openrouter.ai/api/v1/chat/completions',{
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
-          body: JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free', max_tokens:1200, messages:[{role:'user',content:writePrompt}]})
+          body: JSON.stringify({model:getAIModel(), max_tokens:1200, messages:[{role:'user',content:writePrompt}]})
         });
         if(aiResp.status === 429){ continue; } // retry
         if(aiResp.ok){
