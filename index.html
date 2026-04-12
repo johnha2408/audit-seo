@@ -1188,10 +1188,10 @@ async function startScan(){
 
   // ── AI call với retry + fallback models ──
   const FREE_MODELS = [
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'google/gemma-3-27b-it:free',
-    'mistralai/mistral-small-3.1-24b-instruct:free',
+    'deepseek/deepseek-v3.2',
     'deepseek/deepseek-chat-v3-0324:free',
+    'google/gemma-3-27b-it:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
     'openrouter/free'
   ];
   async function callAI(prompt, maxTok=2000){
