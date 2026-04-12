@@ -1516,64 +1516,140 @@ async function applyLinks(postIds){
       const postData = await r.json();
       let content = postData.content?.raw || postData.content?.rendered || '';
 
-      // Inject links — verified URL từ WP, không dùng title làm anchor
+      // ── INJECT LINKS ──────────────────────────────────────────
       const maxLinks = getILSettings().maxLinks;
       let injected = 0;
       const verifiedUrlMap = {};
       ilData.posts.forEach(p=>{ verifiedUrlMap[p.id] = p.link||''; });
 
-      // Strip HTML tags để lấy plain text body (loại trừ title, headings)
-      // Content raw thường có dạng: <!-- wp:heading --><h2>Title</h2><!-- /wp:heading --><!-- wp:paragraph --><p>body</p>
-      // Loại phần trong <h1>-<h6> và post title để tránh inject vào heading/title
-      const stripHeadings = content.replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, '');
+      // Tách các paragraph thẻ <p>...</p> để biết vị trí từng đoạn
+      const getParagraphs = (html) => {
+        const re = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+        const arr = []; let m;
+        while((m = re.exec(html)) !== null){
+          arr.push({ start: m.index, end: m.index+m[0].length, text: m[1].replace(/<[^>]+>/g,''), raw: m[0] });
+        }
+        return arr;
+      };
+
+      // Helper: escape regex chars
+      const escRe = (str) => { let r=str; const chars='.+?^${}()|[]\\'.split(''); chars.forEach(c=>{ r=r.split(c).join('\\'+c); }); return r; };
+
+      // Helper: inject link vào đúng 1 occurrence trong paragraph chỉ định
+      const injectInParagraph = (html, paraStart, anchor, url) => {
+        const escA = escRe(anchor);
+        const segment = html.slice(paraStart);
+        const replaced = segment.replace(
+          new RegExp('(?<![">\w])('+escA+')(?![\w<])', 'i'),
+          '<a href="'+url+'" target="_blank" rel="noopener noreferrer">$1</a>'
+        );
+        if(replaced === segment) return html; // không match
+        return html.slice(0, paraStart) + replaced;
+      };
+
+      // ── Pass 1: tìm anchor đã có trong bài ─────────────────
+      const paragraphs = getParagraphs(content);
+      const totalParas = paragraphs.length;
 
       for(const s of suggs){
         if(injected >= maxLinks) break;
         const realUrl = verifiedUrlMap[s.target_id] || '';
         if(!s.anchor || !realUrl) continue;
+        if(s.anchor.trim().split(/\s+/).length < 2) continue; // bỏ 1 từ
 
-        // FIX 1: Bỏ qua nếu anchor chỉ là 1 từ (SEO không hiệu quả)
-        if(s.anchor.trim().split(/\s+/).length < 2) continue;
+        const escA = escRe(s.anchor);
+        // Tìm tất cả paragraphs chứa anchor (không nằm trong heading)
+        const matchingParas = paragraphs.filter(p => {
+          if(!p.text.toLowerCase().includes(s.anchor.toLowerCase())) return false;
+          // không phải heading
+          const ctx = content.substring(Math.max(0, p.start-30), p.start);
+          return !/<h[1-6]/i.test(ctx);
+        });
+        if(!matchingParas.length) continue;
 
-        // FIX 2: Bỏ qua nếu anchor KHÔNG xuất hiện trong body (chỉ có trong heading/title)
-        const anchorInBody = stripHeadings.toLowerCase().includes(s.anchor.toLowerCase());
-        if(!anchorInBody) continue;
+        // Không inject vào paragraph đầu tiên nếu còn paragraph khác
+        const candidates = matchingParas.length > 1
+          ? matchingParas.slice(1) // bỏ para đầu tiên
+          : matchingParas;
+        // Ưu tiên paragraph ở giữa/cuối bài
+        const targetPara = candidates[Math.floor(candidates.length / 2)];
 
-        // Escape anchor cho regex
-        const escAnchor = s.anchor.replace(/[.+?^${}()|[\]\\]/g,'\\$&');
-
-        // FIX 3: Skip nếu anchor này đã được wrap trong <a> tag rồi
-        const alreadyLinked = new RegExp('<a[^>]*>[^<]*'+escAnchor+'[^<]*<\/a>','i').test(content);
+        // Kiểm tra anchor chưa được link
+        const alreadyLinked = new RegExp('<a[^>]*>[^<]*'+escA+'[^<]*<\/a>','i').test(content);
         if(alreadyLinked) continue;
 
-        // FIX 4: Tìm tất cả matches TRONG BODY (không phải heading)
-        // Dùng content gốc để inject nhưng kiểm tra vị trí dựa trên stripHeadings
-        const reAll = new RegExp('(?<![\">])\\b('+escAnchor+')\\b(?![^<]*<\/a>)','gi');
-        const allMatches = [];
-        let m;
-        while((m = reAll.exec(content)) !== null){
-          // Kiểm tra match này không nằm trong heading tag
-          const before200 = content.substring(Math.max(0, m.index-200), m.index);
-          const isInHeading = /<h[1-6][^>]*>[^<]*$/.test(before200);
-          if(!isInHeading) allMatches.push(m.index);
-        }
-        if(!allMatches.length) continue;
+        const before = content;
+        content = injectInParagraph(content, targetPara.start, s.anchor, realUrl);
+        if(content !== before){ injected++; paragraphs.splice(0); getParagraphs(content).forEach(p=>paragraphs.push(p)); }
+      }
 
-        // FIX 5: Dàn đều — bỏ qua 15% đầu bài, ưu tiên vị trí giữa
-        const skip = Math.floor(content.length * 0.15);
-        const goodMatches = allMatches.filter(idx => idx > skip);
-        const targetIdx = goodMatches.length > 0
-          ? goodMatches[Math.floor(goodMatches.length / 2)]
-          : allMatches[allMatches.length - 1];
+      // ── Pass 2: auto-write sentence cho suggs còn lại ───────
+      // Nếu bài quá ngắn hoặc anchor không tìm được → AI viết 1 câu chứa anchor
+      // chèn vào cuối paragraph phù hợp nhất về chủ đề
+      const pendingSuggs = suggs.filter(s => {
+        if(injected >= maxLinks) return false;
+        const realUrl = verifiedUrlMap[s.target_id] || '';
+        if(!s.anchor || !realUrl || s.anchor.trim().split(/\s+/).length < 2) return false;
+        const escA = escRe(s.anchor);
+        const alreadyLinked = new RegExp('<a[^>]*>[^<]*'+escA+'[^<]*<\/a>','i').test(content);
+        if(alreadyLinked) return false;
+        // Chỉ auto-write nếu anchor không có trong body
+        return !content.toLowerCase().includes(s.anchor.toLowerCase());
+      });
 
-        // FIX 6: Inject với target="_blank" rel="noopener"
-        const beforeInject = content;
-        content = content.slice(0, targetIdx) +
-          content.slice(targetIdx).replace(
-            new RegExp('\\b('+escAnchor+')\\b','i'),
-            '<a href="'+realUrl+'" target="_blank" rel="noopener noreferrer">$1</a>'
-          );
-        if(content !== beforeInject) injected++;
+      if(pendingSuggs.length > 0 && injected < maxLinks){
+        const apiKey = getApiKey();
+        const postTitle = post.title?.rendered || '';
+        const plainBody = content.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').substring(0,800);
+
+        // Gọi AI viết các câu transition
+        try {
+          const writePrompt = 'You are an SEO content writer. Write natural transition sentences to be appended to relevant paragraphs in a blog post.\n\n'+
+            'Post title: '+postTitle+'\n'+
+            'Post summary (first 800 chars): '+plainBody+'\n\n'+
+            'For each item below, write ONE natural sentence (15-25 words) that:\n'+
+            '- Flows naturally as a concluding sentence for a paragraph in this post\n'+
+            '- Contains the exact anchor phrase verbatim\n'+
+            '- Provides genuine value to the reader (SEO + GEO best practice)\n'+
+            '- Is NOT promotional, NOT repetitive of existing content\n'+
+            '- In the SAME LANGUAGE as the post (English if post is English)\n\n'+
+            'Items:\n'+
+            pendingSuggs.slice(0, maxLinks - injected).map((s,i)=>(i+1)+'. anchor="'+s.anchor+'" links_to="'+s.target_title+'" url="'+verifiedUrlMap[s.target_id]+'"').join('\n')+'\n\n'+
+            'Return JSON only: [{"anchor":"...","sentence":"...full sentence with anchor...","url":"..."}]';
+
+          const aiResp = await fetch('https://openrouter.ai/api/v1/chat/completions',{
+            method:'POST',
+            headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
+            body: JSON.stringify({model:'meta-llama/llama-3.3-70b-instruct:free', max_tokens:800, messages:[{role:'user',content:writePrompt}]})
+          });
+          if(aiResp.ok){
+            const aiData = await aiResp.json();
+            const aiTxt = (aiData.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
+            const jsonM = aiTxt.match(/\[\s*\{[\s\S]*\}\s*\]/);
+            if(jsonM){
+              const sentences = JSON.parse(jsonM[0]);
+              // Tìm paragraph phù hợp nhất để chèn câu mới vào cuối
+              const freshParas = getParagraphs(content);
+              const midPara = freshParas[Math.floor(freshParas.length * 0.6)] || freshParas[freshParas.length-1];
+              for(const item of sentences){
+                if(injected >= maxLinks) break;
+                if(!item.sentence || !item.anchor || !item.url) continue;
+                // Wrap anchor trong sentence thành link
+                const escA = escRe(item.anchor);
+                const linkedSentence = item.sentence.replace(
+                  new RegExp('('+escA+')','i'),
+                  '<a href="'+item.url+'" target="_blank" rel="noopener noreferrer">$1</a>'
+                );
+                // Chèn câu mới vào TRƯỚC </p> của paragraph giữa bài
+                if(midPara){
+                  const insertAt = midPara.start + midPara.raw.length - 4; // trước </p>
+                  content = content.slice(0, insertAt) + ' ' + linkedSentence + content.slice(insertAt);
+                  injected++;
+                }
+              }
+            }
+          }
+        } catch(writeErr){ console.warn('Auto-write failed:', writeErr); }
       }
 
       if(injected === 0){ ok++; ilData.applied[postId]='skipped'; continue; }
