@@ -1268,13 +1268,16 @@ async function startScan(){
       // Tạo summary ngắn gọn cho cả site (để biết context)
       const allTitles = posts.map(p=>`${p.id}: ${(p.title?.rendered||'').substring(0,60)}`).join('\n');
       const batchDetail = batch.map(p=>{
-        // Ưu tiên content body, fallback excerpt — lấy 500 ký tự plain text
+        const rawContent = (p.content?.rendered||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
         const rawExcerpt = (p.excerpt?.rendered||'').replace(/<[^>]+>/g,'').trim();
-        const rawContent = (p.content?.rendered||'').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();
-        // Dùng content body (bỏ qua 100 ký tự đầu vì thường là intro/title)
-        const bodyText = rawContent.length > 150
-          ? rawContent.substring(100, 600) // lấy phần giữa body
-          : rawExcerpt.substring(0, 400) || '(no content)';
+        const full = rawContent || rawExcerpt;
+        // Lấy 3 đoạn từ vị trí khác nhau trong bài: đầu, giữa, cuối
+        // để AI có context đa dạng, không chỉ từ intro
+        const len = full.length;
+        const part1 = full.substring(Math.floor(len*0.1), Math.floor(len*0.1)+300); // 10-40% bài
+        const part2 = full.substring(Math.floor(len*0.4), Math.floor(len*0.4)+300); // 40-70% bài
+        const part3 = full.substring(Math.floor(len*0.7), Math.floor(len*0.7)+200); // 70-90% bài
+        const bodyText = [part1, part2, part3].filter(Boolean).join(' [...] ') || '(no content)';
         return {
           id: p.id,
           title: p.title?.rendered||'',
@@ -1289,22 +1292,28 @@ async function startScan(){
       posts.forEach(p=>{ urlMap[p.id] = p.link||''; });
       const targetList = posts.map(p=>p.id+'|'+( p.title?.rendered||'').substring(0,60)+'|'+(p.link||'')).join('\n');
       const batchLines = batchDetail.map(p=>'[SRC_ID:'+p.id+'] TITLE: '+p.title+'\nBODY TEXT: '+p.body).join('\n---\n');
-      const prompt = 'You are an SEO expert. Task: suggest internal links.\n\n'+
-        '=== RULES (follow exactly) ===\n'+
-        'R1. anchor MUST be a 2-4 word phrase copied VERBATIM from the BODY TEXT of the source post — NOT from its title, NOT invented\n'+
-        'R2. anchor must be 2-4 words — reject any single-word anchor\n'+
-        'R3. target_url must be EXACTLY copied from TARGET POSTS list — no modifications, no made-up URLs\n'+
-        'R4. No self-links\n'+
-        'R5. Max '+maxLinks+' links per source post\n'+
-        'R6. If body text is too short or no good phrase found → omit that post from suggestions\n\n'+
-        'EXAMPLE (correct):\n'+
-        'Body text: "...professional video production services help businesses grow their brand..."\n'+
-        'Good anchor: "video production services" (exists verbatim in body)\n'+
-        'Bad anchor: "Video Production Guide" (this is a target post title, not in body text)\n\n'+
+      const prompt = 'You are an expert SEO strategist. Suggest internal links between blog posts.\n\n'+
+        '=== STRICT RULES ===\n'+
+        'R1. anchor MUST be a COMPLETE NOUN PHRASE of 2-4 words copied VERBATIM from source BODY TEXT\n'+
+        '    - GOOD: "video marketing strategy", "corporate video production", "brand storytelling techniques"\n'+
+        '    - BAD: "reliable, visual, and" (fragment), "progress of a" (incomplete), "drive sales" (verb phrase)\n'+
+        '    - BAD: single words like "quality", "video", "strategy"\n'+
+        '    - BAD: phrases with conjunctions at end: "...and", "...or", "...with"\n'+
+        'R2. anchor must NOT come from the source post title or any heading\n'+
+        'R3. target_url MUST be copied EXACTLY from TARGET POSTS list — never modify or invent URLs\n'+
+        'R4. No self-links (source id must NOT equal target id)\n'+
+        'R5. Suggest '+maxLinks+' links per post — MUST suggest DIFFERENT target posts for each anchor\n'+
+        'R6. Each suggestion must link to a DIFFERENT target post (no 2 anchors pointing to same destination)\n\n'+
+        '=== EXAMPLES ===\n'+
+        'Body: "...companies use corporate video production to showcase their expertise and build trust..."\n'+
+        '✓ Good anchor: "corporate video production" → target: Corporate Video Guide\n'+
+        '✓ Good anchor: "build trust" is only 2 words but ok\n'+
+        '✗ Bad anchor: "to showcase their" (grammatical fragment)\n'+
+        '✗ Bad anchor: "and build trust with" (ends with preposition)\n\n'+
         '=== TARGET POSTS (id|title|url) ===\n'+targetList+'\n\n'+
-        '=== SOURCE POSTS TO ANALYZE ===\n'+batchLines+'\n\n'+
-        '=== OUTPUT (compact JSON only, no explanation) ===\n'+
-        '{"suggestions":{"SRC_ID":[{"anchor":"phrase from body","target_id":TGT_ID,"target_title":"title","target_url":"exact url"}]}}';
+        '=== SOURCE POSTS (analyze body text, extract complete noun phrases) ===\n'+batchLines+'\n\n'+
+        '=== OUTPUT: compact JSON, no markdown, no explanation ===\n'+
+        '{"suggestions":{"SRC_ID":[{"anchor":"complete noun phrase from body","target_id":TGT_ID,"target_title":"title","target_url":"exact url"}]}}';
 
       try {
         const txt = await callAI(prompt, 4000);
@@ -1566,22 +1575,33 @@ async function applyLinks(postIds){
         // Tìm tất cả paragraphs chứa anchor (không nằm trong heading)
         const allParas = getParagraphs(content);
         const totalP = allParas.length;
-        const matchingParas = allParas.filter((p, pi) => {
+
+        // Tìm match bỏ qua heading
+        const allMatchingParas = allParas.filter((p, pi) => {
           if(!p.text.toLowerCase().includes(s.anchor.toLowerCase())) return false;
-          const ctx = content.substring(Math.max(0, p.start-30), p.start);
-          if(/<h[1-6]/i.test(ctx)) return false;
-          // FIX 3: Bỏ qua 30% đầu bài (theo index paragraph)
-          if(pi < Math.max(1, Math.floor(totalP * 0.3))) return false;
-          // FIX 3: Bỏ qua nếu paragraph này quá gần paragraph đã inject
-          if(usedParaIndices.some(used => Math.abs(used - pi) < 2)) return false;
+          const ctx = content.substring(Math.max(0, p.start-50), p.start);
+          return !/<h[1-6]/i.test(ctx);
+        });
+        if(!allMatchingParas.length) continue;
+
+        // Ưu tiên match KHÔNG ở đầu bài và KHÔNG sát với link đã inject
+        const matchingParas = allMatchingParas.filter((p, pi) => {
+          const globalIdx = allParas.indexOf(p);
+          // Tránh paragraph đầu tiên nếu có lựa chọn khác
+          if(globalIdx === 0 && allMatchingParas.length > 1) return false;
+          // Không inject 2 link trong 2 paragraph liên tiếp
+          if(usedParaIndices.some(used => Math.abs(used - globalIdx) < 2)) return false;
           return true;
         });
-        if(!matchingParas.length) continue;
+        // Fallback: nếu filter quá strict thì dùng match cuối cùng
+        const finalCandidates = matchingParas.length > 0 ? matchingParas : [allMatchingParas[allMatchingParas.length-1]];
+        if(!finalCandidates.length) continue;
 
-        // Ưu tiên paragraph giữa/cuối trong các candidates hợp lệ
-        const targetPara = matchingParas[Math.floor(matchingParas.length / 2)];
+        // Chọn match ở giữa trong candidates
+        const targetPara = finalCandidates[Math.floor(finalCandidates.length / 2)];
         const targetParaIdx = allParas.indexOf(targetPara);
 
+        // Ưu tiên paragraph giữa/cuối trong các candidates hợp lệ
         const before = content;
         content = injectInParagraph(content, targetPara.start, s.anchor, realUrl);
         if(content !== before){
@@ -1593,17 +1613,24 @@ async function applyLinks(postIds){
       // ── Pass 2: auto-write sentence cho suggs còn lại ───────
       // Nếu bài quá ngắn hoặc anchor không tìm được → AI viết 1 câu chứa anchor
       // chèn vào cuối paragraph phù hợp nhất về chủ đề
+      // Pass 2: auto-write cho TẤT CẢ suggs chưa được inject thành công
+      const injectedAnchors = new Set();
+      // Mark các anchor đã inject từ Pass 1
+      suggs.forEach(s => {
+        if(!s.anchor) return;
+        const escA = escRe(s.anchor);
+        if(new RegExp('<a[^>]*>[^<]*'+escA+'[^<]*<\/a>','i').test(content)){
+          injectedAnchors.add(s.anchor.toLowerCase());
+        }
+      });
       const pendingSuggs = suggs.filter(s => {
         if(injected >= maxLinks) return false;
         const realUrl = verifiedUrlMap[s.target_id] || '';
-        if(!s.anchor || !realUrl || s.anchor.trim().split(/\s+/).length < 2) return false;
-        // FIX: không tự link bài về chính nó
+        if(!s.anchor || !realUrl) return false;
+        if(s.anchor.trim().split(/\s+/).length < 2) return false;
         if(String(s.target_id) === String(postId)) return false;
-        const escA = escRe(s.anchor);
-        const alreadyLinked = new RegExp('<a[^>]*>[^<]*'+escA+'[^<]*<\/a>','i').test(content);
-        if(alreadyLinked) return false;
-        // Auto-write nếu anchor không có trong body
-        return !content.toLowerCase().includes(s.anchor.toLowerCase());
+        // Chưa được inject
+        return !injectedAnchors.has(s.anchor.toLowerCase());
       });
 
       if(pendingSuggs.length > 0 && injected < maxLinks){
