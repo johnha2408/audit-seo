@@ -1233,7 +1233,7 @@ async function startScan(){
     let posts = [];
     let page = 1;
     while(true){
-      const r = await fetch(`${cfg.url}/wp-json/wp/v2/posts?per_page=100&page=${page}&status=publish&_fields=id,title,link,excerpt`,{
+      const r = await fetch(`${cfg.url}/wp-json/wp/v2/posts?per_page=100&page=${page}&status=publish&_fields=id,title,link,excerpt,content`,{
         headers:{'Authorization':'Basic '+btoa(cfg.user+':'+cfg.pass)}
       });
       if(!r.ok) throw new Error('WP API lỗi '+r.status+': Kiểm tra URL và credentials');
@@ -1267,31 +1267,44 @@ async function startScan(){
 
       // Tạo summary ngắn gọn cho cả site (để biết context)
       const allTitles = posts.map(p=>`${p.id}: ${(p.title?.rendered||'').substring(0,60)}`).join('\n');
-      const batchDetail = batch.map(p=>({
-        id: p.id,
-        title: p.title?.rendered||'',
-        url: p.link||'',
-        excerpt: (p.excerpt?.rendered||'').replace(/<[^>]+>/g,'').substring(0,100)
-      }));
+      const batchDetail = batch.map(p=>{
+        // Ưu tiên content body, fallback excerpt — lấy 500 ký tự plain text
+        const rawExcerpt = (p.excerpt?.rendered||'').replace(/<[^>]+>/g,'').trim();
+        const rawContent = (p.content?.rendered||'').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();
+        // Dùng content body (bỏ qua 100 ký tự đầu vì thường là intro/title)
+        const bodyText = rawContent.length > 150
+          ? rawContent.substring(100, 600) // lấy phần giữa body
+          : rawExcerpt.substring(0, 400) || '(no content)';
+        return {
+          id: p.id,
+          title: p.title?.rendered||'',
+          url: p.link||'',
+          body: bodyText
+        };
+      });
 
       // Build prompt — URL thật từ WP data, anchor 2-4 từ từ excerpt
       // Map id → real URL để AI không hallucinate
       const urlMap = {};
       posts.forEach(p=>{ urlMap[p.id] = p.link||''; });
       const targetList = posts.map(p=>p.id+'|'+( p.title?.rendered||'').substring(0,60)+'|'+(p.link||'')).join('\n');
-      const batchLines = batchDetail.map(p=>'[ID:'+p.id+'] '+p.title+'\n  excerpt: '+(p.excerpt||'(none)')).join('\n\n');
-      const prompt = 'SEO internal linking task. Return ONLY valid compact JSON.\n\n'+
-        'STRICT RULES:\n'+
-        '1. anchor MUST be 2-4 words taken verbatim from the source post BODY/EXCERPT only — NOT from the post title or headings\n'+
-        '2. anchor must be 2-4 words minimum — NEVER single words like "art", "big", "guide"\n'+
-        '3. target_url MUST be copied EXACTLY from the target list below — do NOT invent or modify URLs\n'+
-        '4. No self-links (source id != target id)\n'+
-        '5. Max '+maxLinks+' suggestions per post\n'+
-        '6. Only suggest if genuinely semantically related\n\n'+
-        'TARGET POSTS (id|title|exact_url):\n'+targetList+'\n\n'+
-        'SOURCE POSTS TO ANALYZE:\n'+batchLines+'\n\n'+
-        'Output JSON (compact, no whitespace):\n'+
-        '{"suggestions":{"SRC_ID":[{"anchor":"2-4 word phrase","target_id":TGT_ID,"target_title":"title","target_url":"exact url from list above"}]}}';
+      const batchLines = batchDetail.map(p=>'[SRC_ID:'+p.id+'] TITLE: '+p.title+'\nBODY TEXT: '+p.body).join('\n---\n');
+      const prompt = 'You are an SEO expert. Task: suggest internal links.\n\n'+
+        '=== RULES (follow exactly) ===\n'+
+        'R1. anchor MUST be a 2-4 word phrase copied VERBATIM from the BODY TEXT of the source post — NOT from its title, NOT invented\n'+
+        'R2. anchor must be 2-4 words — reject any single-word anchor\n'+
+        'R3. target_url must be EXACTLY copied from TARGET POSTS list — no modifications, no made-up URLs\n'+
+        'R4. No self-links\n'+
+        'R5. Max '+maxLinks+' links per source post\n'+
+        'R6. If body text is too short or no good phrase found → omit that post from suggestions\n\n'+
+        'EXAMPLE (correct):\n'+
+        'Body text: "...professional video production services help businesses grow their brand..."\n'+
+        'Good anchor: "video production services" (exists verbatim in body)\n'+
+        'Bad anchor: "Video Production Guide" (this is a target post title, not in body text)\n\n'+
+        '=== TARGET POSTS (id|title|url) ===\n'+targetList+'\n\n'+
+        '=== SOURCE POSTS TO ANALYZE ===\n'+batchLines+'\n\n'+
+        '=== OUTPUT (compact JSON only, no explanation) ===\n'+
+        '{"suggestions":{"SRC_ID":[{"anchor":"phrase from body","target_id":TGT_ID,"target_title":"title","target_url":"exact url"}]}}';
 
       try {
         const txt = await callAI(prompt, 4000);
