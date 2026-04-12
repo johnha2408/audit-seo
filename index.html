@@ -1194,7 +1194,7 @@ async function startScan(){
     'meta-llama/llama-3.3-70b-instruct:free',
     'openrouter/free'
   ];
-  async function callAI(prompt, maxTok=2000){
+  async function callAI(prompt, maxTok=4000){
     for(let mi=0; mi<FREE_MODELS.length; mi++){
       const model = FREE_MODELS[mi];
       for(let retry=0; retry<2; retry++){
@@ -1249,12 +1249,12 @@ async function startScan(){
     addLog(`✓ Tải xong ${posts.length} bài viết`);
 
     // Step 2: Chunk posts thành batch nhỏ để tránh rate limit
-    const BATCH_SIZE = 20; // Mỗi batch 20 bài, tránh prompt quá dài
+    const BATCH_SIZE = 10; // Mỗi batch 10 bài để tránh response bị truncate
     const batches = [];
     for(let i=0; i<posts.length; i+=BATCH_SIZE){
       batches.push(posts.slice(i, i+BATCH_SIZE));
     }
-    addLog(`→ Phân thành ${batches.length} batch × ${BATCH_SIZE} bài`);
+    addLog("→ Phân thành "+batches.length+" batch × "+BATCH_SIZE+" bài");
 
     const allSuggestions = {};
     const maxLinks = getILSettings().maxLinks;
@@ -1274,33 +1274,52 @@ async function startScan(){
         excerpt: (p.excerpt?.rendered||'').replace(/<[^>]+>/g,'').substring(0,100)
       }));
 
-      const prompt = [
-        'Bạn là SEO expert. Gợi ý internal links cho '+batch.length+' bài viết bên dưới.',
-        '',
-        'TẤT CẢ bài trên website (để chọn bài đích phù hợp):',
-        posts.map(p=>p.id+': '+(p.title?.rendered||'').substring(0,60)).join('\n'),
-        '',
-        'Phân tích '+batch.length+' bài này và gợi ý link đến các bài phù hợp trong danh sách trên:',
-        batchDetail.map(p=>'ID:'+p.id+' | "'+( p.title||'')+'" | '+(p.excerpt||'')).join('\n'),
-        '',
-        'Trả về JSON thuần (không markdown):',
-        '{"suggestions":{"<post_id>": [{"anchor":"<anchor text>","target_id":<id>,"target_title":"<tiêu đề>","target_url":"<url>"}]}}',
-        '',
-        'Quy tắc: tối đa '+maxLinks+' link/bài, anchor tự nhiên, không link bài với chính nó, chỉ JSON.'
-      ].join('\n');
+      // Tạo danh sách titles ngắn gọn (chỉ id + title, không excerpt)
+      const allTitlesShort = posts.map(p=>p.id+': '+(p.title?.rendered||'').substring(0,50)).join('\n');
+      const batchLines = batchDetail.map(p=>'['+p.id+'] '+p.title+(p.excerpt?' — '+p.excerpt.substring(0,80):'')).join('\n');
+      const prompt = 'SEO internal linking task. Return ONLY valid JSON, no markdown.\n\n'+
+        'All posts on site (for link targets):\n'+allTitlesShort+'\n\n'+
+        'Analyze these '+batch.length+' posts and suggest internal links:\n'+batchLines+'\n\n'+
+        'Output format (JSON only):\n'+
+        '{"suggestions":{"POST_ID":[{"anchor":"anchor text","target_id":TARGET_ID,"target_title":"title","target_url":"url"}]}}\n\n'+
+        'Rules: max '+maxLinks+' links per post, natural anchor text, no self-links, no duplicate targets per post.';
 
       try {
         const txt = await callAI(prompt, 2000);
         const clean = txt.replace(/```json|```/g,'').trim();
         // Tìm JSON trong response
-        const jsonMatch = clean.match(/\{[\s\S]*\}/);
+        // Robust JSON parse — handle truncated responses
+        const jsonMatch = clean.match(/\{[\s\S]*/);
         if(jsonMatch){
-          const parsed = JSON.parse(jsonMatch[0]);
-          const suggs = parsed.suggestions||{};
-          Object.assign(allSuggestions, suggs);
-          addLog(`✓ Batch ${bi+1}: ${Object.keys(suggs).length} bài có gợi ý`);
+          let jsonStr = jsonMatch[0];
+          let parsed = null;
+          // Try full parse first
+          try { parsed = JSON.parse(jsonStr); }
+          catch(e1) {
+            // Try to salvage: find last complete suggestion entry
+            // Truncate to last valid closing bracket
+            const attempts = [
+              jsonStr,
+              jsonStr.replace(/,\s*\{[^}]*$/, '}]}}}'),  // remove last incomplete object
+              jsonStr.replace(/,\s*"[^"]*$/, '}}'),         // remove trailing incomplete key
+              jsonStr + (jsonStr.match(/\{/g)||[]).length > (jsonStr.match(/\}/g)||[]).length
+                ? '}'.repeat(Math.max(0,(jsonStr.match(/\{/g)||[]).length-(jsonStr.match(/\}/g)||[]).length))
+                : ''
+            ];
+            for(const attempt of attempts){
+              try { parsed = JSON.parse(attempt); break; } catch(e2) {}
+            }
+          }
+          if(parsed){
+            const suggs = parsed.suggestions||{};
+            const n = Object.keys(suggs).length;
+            Object.assign(allSuggestions, suggs);
+            addLog("✓ Batch "+(bi+1)+": "+n+" bài có gợi ý");
+          } else {
+            addLog("⚠ Batch "+(bi+1)+": JSON bị truncate, không salvage được — bỏ qua");
+          }
         } else {
-          addLog(`⚠ Batch ${bi+1}: không parse được JSON, bỏ qua`);
+          addLog("⚠ Batch "+(bi+1)+": response không có JSON, bỏ qua");
         }
       } catch(batchErr){
         addLog(`⚠ Batch ${bi+1} lỗi: ${batchErr.message} — bỏ qua, tiếp tục`);
