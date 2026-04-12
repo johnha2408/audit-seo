@@ -1548,39 +1548,46 @@ async function applyLinks(postIds){
       };
 
       // ── Pass 1: tìm anchor đã có trong bài ─────────────────
-      const paragraphs = getParagraphs(content);
-      const totalParas = paragraphs.length;
+      const usedParaIndices = []; // track paragraphs đã inject để không dùng 2 lần liên tiếp
 
       for(const s of suggs){
         if(injected >= maxLinks) break;
         const realUrl = verifiedUrlMap[s.target_id] || '';
         if(!s.anchor || !realUrl) continue;
         if(s.anchor.trim().split(/\s+/).length < 2) continue; // bỏ 1 từ
+        // FIX: không tự link bài về chính nó
+        if(String(s.target_id) === String(postId)) continue;
 
         const escA = escRe(s.anchor);
-        // Tìm tất cả paragraphs chứa anchor (không nằm trong heading)
-        const matchingParas = paragraphs.filter(p => {
-          if(!p.text.toLowerCase().includes(s.anchor.toLowerCase())) return false;
-          // không phải heading
-          const ctx = content.substring(Math.max(0, p.start-30), p.start);
-          return !/<h[1-6]/i.test(ctx);
-        });
-        if(!matchingParas.length) continue;
-
-        // Không inject vào paragraph đầu tiên nếu còn paragraph khác
-        const candidates = matchingParas.length > 1
-          ? matchingParas.slice(1) // bỏ para đầu tiên
-          : matchingParas;
-        // Ưu tiên paragraph ở giữa/cuối bài
-        const targetPara = candidates[Math.floor(candidates.length / 2)];
-
         // Kiểm tra anchor chưa được link
         const alreadyLinked = new RegExp('<a[^>]*>[^<]*'+escA+'[^<]*<\/a>','i').test(content);
         if(alreadyLinked) continue;
 
+        // Tìm tất cả paragraphs chứa anchor (không nằm trong heading)
+        const allParas = getParagraphs(content);
+        const totalP = allParas.length;
+        const matchingParas = allParas.filter((p, pi) => {
+          if(!p.text.toLowerCase().includes(s.anchor.toLowerCase())) return false;
+          const ctx = content.substring(Math.max(0, p.start-30), p.start);
+          if(/<h[1-6]/i.test(ctx)) return false;
+          // FIX 3: Bỏ qua 30% đầu bài (theo index paragraph)
+          if(pi < Math.max(1, Math.floor(totalP * 0.3))) return false;
+          // FIX 3: Bỏ qua nếu paragraph này quá gần paragraph đã inject
+          if(usedParaIndices.some(used => Math.abs(used - pi) < 2)) return false;
+          return true;
+        });
+        if(!matchingParas.length) continue;
+
+        // Ưu tiên paragraph giữa/cuối trong các candidates hợp lệ
+        const targetPara = matchingParas[Math.floor(matchingParas.length / 2)];
+        const targetParaIdx = allParas.indexOf(targetPara);
+
         const before = content;
         content = injectInParagraph(content, targetPara.start, s.anchor, realUrl);
-        if(content !== before){ injected++; paragraphs.splice(0); getParagraphs(content).forEach(p=>paragraphs.push(p)); }
+        if(content !== before){
+          injected++;
+          usedParaIndices.push(targetParaIdx);
+        }
       }
 
       // ── Pass 2: auto-write sentence cho suggs còn lại ───────
@@ -1590,10 +1597,12 @@ async function applyLinks(postIds){
         if(injected >= maxLinks) return false;
         const realUrl = verifiedUrlMap[s.target_id] || '';
         if(!s.anchor || !realUrl || s.anchor.trim().split(/\s+/).length < 2) return false;
+        // FIX: không tự link bài về chính nó
+        if(String(s.target_id) === String(postId)) return false;
         const escA = escRe(s.anchor);
         const alreadyLinked = new RegExp('<a[^>]*>[^<]*'+escA+'[^<]*<\/a>','i').test(content);
         if(alreadyLinked) return false;
-        // Chỉ auto-write nếu anchor không có trong body
+        // Auto-write nếu anchor không có trong body
         return !content.toLowerCase().includes(s.anchor.toLowerCase());
       });
 
@@ -1628,24 +1637,29 @@ async function applyLinks(postIds){
             const jsonM = aiTxt.match(/\[\s*\{[\s\S]*\}\s*\]/);
             if(jsonM){
               const sentences = JSON.parse(jsonM[0]);
-              // Tìm paragraph phù hợp nhất để chèn câu mới vào cuối
-              const freshParas = getParagraphs(content);
-              const midPara = freshParas[Math.floor(freshParas.length * 0.6)] || freshParas[freshParas.length-1];
-              for(const item of sentences){
+              for(let si=0; si<sentences.length; si++){
                 if(injected >= maxLinks) break;
+                const item = sentences[si];
                 if(!item.sentence || !item.anchor || !item.url) continue;
-                // Wrap anchor trong sentence thành link
+                // Wrap anchor thành link
                 const escA = escRe(item.anchor);
                 const linkedSentence = item.sentence.replace(
                   new RegExp('('+escA+')','i'),
                   '<a href="'+item.url+'" target="_blank" rel="noopener noreferrer">$1</a>'
                 );
-                // Chèn câu mới vào TRƯỚC </p> của paragraph giữa bài
-                if(midPara){
-                  const insertAt = midPara.start + midPara.raw.length - 4; // trước </p>
-                  content = content.slice(0, insertAt) + ' ' + linkedSentence + content.slice(insertAt);
-                  injected++;
-                }
+                // Mỗi câu chèn vào paragraph khác nhau — dàn từ 50% đến cuối bài
+                const freshParas = getParagraphs(content);
+                const bodyParas = freshParas.filter((p,pi) => pi > 0); // bỏ para đầu tiên
+                if(!bodyParas.length) break;
+                // Chia đều: sentence 0 → 50%, sentence 1 → 65%, sentence 2 → 80%...
+                const ratio = 0.5 + (si / Math.max(sentences.length, 1)) * 0.4;
+                const pickIdx = Math.min(Math.floor(bodyParas.length * ratio), bodyParas.length - 1);
+                const targetP = bodyParas[pickIdx];
+                // Chèn TRƯỚC </p>
+                const closeTag = targetP.raw.slice(-4); // </p>
+                const insertAt = targetP.start + targetP.raw.length - closeTag.length;
+                content = content.slice(0, insertAt) + ' ' + linkedSentence + content.slice(insertAt);
+                injected++;
               }
             }
           }
