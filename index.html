@@ -440,9 +440,9 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
       <div class="m-close" onclick="closeSettings()">✕</div>
     </div>
     <div class="form-grp">
-      <label class="form-lbl">Anthropic API Key <span class="req">*</span></label>
-      <input class="form-inp" id="apiKeyInput" type="password" placeholder="sk-ant-api03-...">
-      <div class="form-hint">Key được lưu trong localStorage của trình duyệt, không gửi đi đâu ngoài Anthropic API.</div>
+      <label class="form-lbl">OpenRouter API Key <span class="req">*</span></label>
+      <input class="form-inp" id="apiKeyInput" type="password" placeholder="sk-or-v1-...">
+      <div class="form-hint">Key được lưu trong localStorage. Lấy key miễn phí tại openrouter.ai/keys</div>
     </div>
     <div class="m-footer">
       <button class="btn-cancel" onclick="closeSettings()">Hủy</button>
@@ -536,7 +536,7 @@ function renderPlanList(){
           <div class="icon">📋</div>
           <p style="font-size:14px;font-weight:600;margin-bottom:6px">Chưa có Keyword Plan nào</p>
           <p>Nhấn "Tạo KW Plan mới" để bắt đầu phân tích từ khóa bằng AI</p>
-          ${!getApiKey()?'<p style="margin-top:10px;color:#f59e0b">⚠ Chưa có API Key — nhấn ⚙ góc trên phải để cài đặt</p>':''}
+          ${!getApiKey()?'<p style="margin-top:10px;color:#f59e0b">⚠ Chưa có OpenRouter API Key — nhấn ⚙ để cài đặt</p>':''}
         </div>
       </div>`;
     return;
@@ -573,7 +573,7 @@ function renderPlanList(){
 
 // ── MODAL ──
 function openModal(){
-  if(!getApiKey()){ toast('⚠ Chưa có API Key — nhấn ⚙ để cài đặt','err'); openSettings(); return; }
+  if(!getApiKey()){ toast('⚠ Chưa có OpenRouter API Key — nhấn ⚙ để cài đặt','err'); openSettings(); return; }
   document.getElementById('modal').classList.add('show');
   setTimeout(()=>document.getElementById('fName').focus(),100);
 }
@@ -674,14 +674,14 @@ Trả về JSON THUẦN TÚY, không markdown, không backtick:
 Quy tắc: 4-7 cluster, pillar là head term volume cao, cluster là long-tail cụ thể hơn. Chỉ JSON, không gì khác.`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body: JSON.stringify({model:'claude-opus-4-5',max_tokens:4000,messages:[{role:'user',content:prompt}]})
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
+      body: JSON.stringify({model:'google/gemma-3-27b-it:free',max_tokens:4000,messages:[{role:'user',content:prompt}]})
     });
     if(!res.ok){ const err=await res.json(); throw new Error(err.error?.message||'API error '+res.status); }
     const data = await res.json();
-    const txt = data.content?.find(b=>b.type==='text')?.text||'';
+    const txt = data.choices?.[0]?.message?.content||'';
     const clean = txt.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
     plan.clusters = parsed.clusters||[];
@@ -958,15 +958,15 @@ Tạo outline gồm:
 Tiếng Việt, ngắn gọn thực tế.`;
 
   try {
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
+    const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
+      body:JSON.stringify({model:'google/gemma-3-27b-it:free',max_tokens:1000,messages:[{role:'user',content:prompt}]})
     });
     if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||'API error'); }
     const data=await res.json();
     body.className='o-body';
-    body.textContent=data.content?.find(b=>b.type==='text')?.text||'Không tạo được outline.';
+    body.textContent=data.choices?.[0]?.message?.content||'Không tạo được outline.';
   } catch(e){ body.className='o-body'; body.textContent='Lỗi: '+e.message; }
 }
 function closeOutline(){ document.getElementById('oPanel').classList.remove('open'); }
@@ -1245,14 +1245,14 @@ Trả về JSON THUẦN TÚY:
 
 Chỉ JSON, không giải thích.`;
 
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-opus-4-5',max_tokens:4000,messages:[{role:'user',content:prompt}]})
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
+      body:JSON.stringify({model:'google/gemma-3-27b-it:free',max_tokens:4000,messages:[{role:'user',content:prompt}]})
     });
-    if(!res.ok){ const e=await res.json(); throw new Error('Claude API: '+e.error?.message); }
+    if(!res.ok){ const e=await res.json(); throw new Error('OpenRouter API: '+e.error?.message); }
     const aiData = await res.json();
-    const txt = aiData.content?.find(b=>b.type==='text')?.text||'';
+    const txt = aiData.choices?.[0]?.message?.content||'';
     const clean = txt.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
 
