@@ -3158,37 +3158,57 @@ async function runContentPlan(){
 }
 
 async function fetchSitemapUrls(url, addLog){
-  const cors = 'https://api.allorigins.win/get?url=';
-  try {
-    const r = await fetch(cors+encodeURIComponent(url));
-    const d = await r.json();
-    const xml = d.contents || '';
-    // Check if sitemap index
-    if(xml.includes('<sitemapindex')){
-      addLog('→ Sitemap index detected — fetching child sitemaps...');
-      const childUrls = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].trim());
-      let all = [];
-      for(const cu of childUrls.slice(0,10)){
-        try {
-          const cr = await fetch(cors+encodeURIComponent(cu));
-          const cd = await cr.json();
-          const locs = [...(cd.contents||'').matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].trim()).filter(u=>/https?:\/\//.test(u));
-          all.push(...locs);
-          addLog('  → '+cu.split('/').pop()+': '+locs.length+' URLs');
-          await new Promise(r=>setTimeout(r,500));
-        } catch(e){ addLog('  ⚠ Skip '+cu); }
-      }
-      return all;
-    } else {
-      const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].trim()).filter(u=>/https?:\/\//.test(u));
-      return locs;
+  // Multiple CORS proxy fallbacks
+  const PROXIES = [
+    u => 'https://corsproxy.io/?'+encodeURIComponent(u),
+    u => 'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
+    u => 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u),
+    u => 'https://thingproxy.freeboard.io/fetch/'+u,
+  ];
+
+  async function fetchXML(targetUrl){
+    for(let pi=0; pi<PROXIES.length; pi++){
+      try {
+        const proxyUrl = PROXIES[pi](targetUrl);
+        addLog('  → Thử proxy '+(pi+1)+'/'+PROXIES.length+': '+proxyUrl.split('?')[0].split('/').pop()+'...');
+        const r = await fetch(proxyUrl, {signal: AbortSignal.timeout(8000)});
+        if(!r.ok) continue;
+        const txt = await r.text();
+        // allorigins raw returns JSON wrapper sometimes
+        if(txt.trim().startsWith('{') && txt.includes('"contents"')){
+          const j = JSON.parse(txt);
+          return j.contents || j.body || txt;
+        }
+        if(txt.includes('<') && (txt.includes('<urlset') || txt.includes('<sitemapindex') || txt.includes('<loc>'))) return txt;
+      } catch(e){ addLog('  ⚠ Proxy '+(pi+1)+' fail: '+e.message.substring(0,40)); }
     }
-  } catch(e){
-    // Fallback: try without cors proxy
-    addLog('⚠ CORS proxy failed, trying direct fetch...');
-    const r2 = await fetch(url);
-    const xml2 = await r2.text();
-    return [...xml2.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].trim()).filter(u=>/https?:\/\//.test(u));
+    throw new Error('Tất cả CORS proxy đều fail. Hãy dán danh sách URLs trực tiếp vào ô nhập.');
+  }
+
+  const parseUrls = xml => [...xml.matchAll(/<loc>\s*(.*?)\s*<\/loc>/g)].map(m=>m[1].trim()).filter(u=>/^https?:\/\//.test(u));
+
+  addLog('→ Fetching: '+url);
+  const xml = await fetchXML(url);
+
+  if(xml.includes('<sitemapindex')){
+    addLog('→ Sitemap index — đang fetch child sitemaps...');
+    const childUrls = parseUrls(xml).filter(u=>u.endsWith('.xml')||u.includes('sitemap'));
+    addLog('  → Tìm thấy '+childUrls.length+' child sitemaps');
+    let all = [];
+    for(const cu of childUrls.slice(0,15)){
+      try {
+        const cxml = await fetchXML(cu);
+        const locs = parseUrls(cxml);
+        all.push(...locs);
+        addLog('  ✓ '+cu.split('/').pop()+': '+locs.length+' URLs');
+        await new Promise(r=>setTimeout(r,300));
+      } catch(e){ addLog('  ⚠ Skip '+cu.split('/').pop()+': '+e.message.substring(0,50)); }
+    }
+    return all;
+  } else {
+    const locs = parseUrls(xml);
+    addLog('✓ Parsed '+locs.length+' URLs từ sitemap');
+    return locs;
   }
 }
 
