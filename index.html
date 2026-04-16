@@ -374,6 +374,46 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
 /* GSC config input */
 .gsc-inp{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:12.5px;padding:9px 12px;outline:none;transition:border-color .15s;margin-top:6px}
 .gsc-inp:focus{border-color:var(--green)}
+/* ── CONTENT PLAN ── */
+.cp-page{padding:0}
+.cp-toolbar{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.cp-input{flex:1;min-width:280px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:12.5px;padding:9px 14px;outline:none;transition:border-color .15s}
+.cp-input:focus{border-color:var(--green)}
+.cp-input::placeholder{color:var(--text3)}
+.cp-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+.cp-stat{background:var(--surface);padding:14px 18px}
+.cp-stat-num{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.cp-stat-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+/* Cluster accordion */
+.cp-cluster{border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden}
+.cp-cluster-header{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;background:var(--surface);transition:background .1s}
+.cp-cluster-header:hover{background:var(--surface2)}
+.cp-cluster-title{font-size:13px;font-weight:600;flex:1}
+.cp-cluster-meta{display:flex;gap:6px;align-items:center}
+.cp-pillar-badge{font-size:10px;background:#1e3a5f;color:#60a5fa;border:1px solid #60a5fa44;border-radius:4px;padding:2px 6px}
+.cp-cluster-badge{font-size:10px;background:var(--gdim);color:var(--green);border:1px solid var(--gborder);border-radius:4px;padding:2px 6px}
+.cp-gap-badge{font-size:10px;background:#78350f22;color:#f59e0b;border:1px solid #f59e0b44;border-radius:4px;padding:2px 6px}
+.cp-cluster-body{padding:0 16px 12px;border-top:1px solid var(--border)}
+/* Post row in cluster */
+.cp-post-row{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.cp-post-row:last-child{border-bottom:none}
+.cp-role-pill{font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600;white-space:nowrap}
+.cp-role-pillar{background:#1e3a5f;color:#60a5fa}
+.cp-role-cluster{background:var(--gdim);color:var(--green)}
+.cp-role-orphan{background:#3b0f0f;color:#f87171}
+/* Gap recommendations */
+.cp-gap-item{display:flex;gap:10px;padding:10px 12px;border-radius:6px;margin-top:6px;font-size:12px;align-items:flex-start}
+.cp-gap-high{background:#7f1d1d15;border:1px solid #f8717133}
+.cp-gap-medium{background:#78350f15;border:1px solid #f59e0b33}
+.cp-gap-low{background:#14532d15;border:1px solid #4ade8033}
+.cp-gap-title{font-weight:600;margin-bottom:3px}
+.cp-gap-kw{font-size:10.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+/* Progress */
+.cp-progress{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:6px}
+.cp-progress-bar{height:100%;background:var(--green);border-radius:2px;transition:width .3s}
+/* Log */
+.cp-log{font-size:11.5px;color:var(--text3);padding:12px 20px;font-family:'JetBrains Mono',monospace;border-bottom:1px solid var(--border);max-height:140px;overflow-y:auto}
+.cp-log-line{padding:1px 0;line-height:1.6}
 /* Scanning animation */
 .il-scanning{display:flex;align-items:center;gap:10px;padding:16px 20px;background:#1d4ed815;border-bottom:1px solid #1d4ed833;font-size:12.5px;color:#60a5fa}
 .il-prog-wrap{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
@@ -434,7 +474,7 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
     </div>
     <div class="topbar-tabs">
       <div class="t-tab" onclick="showView('plans')">Tổng quan</div>
-      <div class="t-tab">YouTube <span class="t-cnt">0</span></div>
+      <div class="t-tab" id="tab-content-plan" onclick="showView('cp')">Content Plan <span class="t-cnt" id="tb-cp-cnt">0</span></div>
       <div class="t-tab active" id="tab-kwplan" onclick="showView('plans')">Keyword Plan <span class="t-cnt g" id="tb-plan-cnt">0</span></div>
       <div class="t-tab" id="tab-articles">Bài viết <span class="t-cnt" id="tb-art-cnt">0</span></div>
       <div class="t-tab" id="tab-il" onclick="showView('il')">Liên kết nội bộ <span class="t-cnt" id="tb-il-cnt">0</span></div>
@@ -1217,6 +1257,9 @@ function showView(view){
   } else if(view==='seo'){
     document.getElementById('tab-seo-opt').classList.add('active');
     renderSEOPage();
+  } else if(view==='cp'){
+    document.getElementById('tab-content-plan').classList.add('active');
+    renderContentPlanPage();
   }
 }
 
@@ -2895,6 +2938,448 @@ document.getElementById('gscModal').addEventListener('click',e=>{ if(e.target.id
 
 // Handle OAuth callback on page load
 handleGSCOAuthCallback();
+
+// ── CONTENT PLAN ─────────────────────────────────────────────
+let cpData = null; // {urls, clusters, gaps, orphans}
+let cpRunning = false;
+let cpLogs = [];
+
+function renderContentPlanPage(){
+  document.getElementById('content').innerHTML = `
+    <div class="cp-page">
+      <div class="cp-toolbar">
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:700">Content Plan</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">Phân tích sitemap → Pillar-Cluster architecture → Content gaps → Đề xuất bài viết mới</div>
+        </div>
+      </div>
+      <div class="cp-toolbar" style="border-top:none">
+        <input class="cp-input" id="cpSitemapUrl" placeholder="Nhập URL sitemap: https://domain.com/sitemap.xml (hoặc dán danh sách URL)">
+        <select class="seo-site-select" id="cpLang" style="width:auto">
+          <option value="en">🇺🇸 English</option>
+          <option value="vi">🇻🇳 Tiếng Việt</option>
+        </select>
+        <button class="btn-green" onclick="runContentPlan()" id="cpRunBtn">
+          🔍 Phân tích
+        </button>
+        ${cpData ? '<button class="btn-outline" onclick="clearCPData()" style="font-size:11px">🗑 Xóa kết quả</button>' : ''}
+      </div>
+      <div id="cpBody">
+        ${cpData ? renderCPResults() : renderCPIntro()}
+      </div>
+    </div>`;
+}
+
+function renderCPIntro(){
+  return `
+    <div style="padding:24px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:800px">
+        ${[
+          ['🗺️','Sitemap → Pillar-Cluster','Nhập URL sitemap, tool tự động phân tích cấu trúc bài viết theo pillar-cluster'],
+          ['🔍','Content Gap Analysis','Phát hiện các chủ đề chưa có bài viết, đề xuất tiêu đề + keyword + slug chuẩn SEO/GEO'],
+          ['📝','Chuẩn hoá bài viết','Mỗi bài viết được đánh giá theo checklist SEO/GEO: intent, depth, E-E-A-T, schema'],
+          ['💡','Topic Expansion','Gợi ý topic mới nên viết để mở rộng topical authority'],
+          ['🏷️','Tag Suggestions','Đề xuất WordPress tags phù hợp cho từng nhóm topic'],
+          ['📊','Priority Score','Sắp xếp bài viết cần làm theo impact × effort']
+        ].map(([i,t,d])=>`
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:22px;margin-bottom:6px">${i}</div>
+            <div style="font-size:12.5px;font-weight:600;margin-bottom:4px;color:var(--text)">${t}</div>
+            <div style="font-size:11px;color:var(--text3);line-height:1.6">${d}</div>
+          </div>`).join('')}
+      </div>
+      <div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;max-width:600px">
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:8px">📋 Ví dụ input:</div>
+        <div style="font-size:11.5px;color:var(--text3);line-height:2;font-family:'JetBrains Mono',monospace">
+          https://storimaticstudio.com/sitemap.xml<br>
+          https://storimaticstudio.com/post-sitemap.xml<br>
+          <span style="color:var(--text3)">// hoặc paste danh sách URL thẳng vào ô trên</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function clearCPData(){ cpData = null; cpLogs = []; localStorage.removeItem('genseo_cp'); renderContentPlanPage(); }
+
+async function runContentPlan(){
+  if(cpRunning) return;
+  const apiKey = getApiKey();
+  if(!apiKey){ toast('Cần OpenRouter API Key','err'); openSettings(); return; }
+  const input = document.getElementById('cpSitemapUrl')?.value.trim();
+  if(!input){ toast('Nhập URL sitemap hoặc danh sách URL','err'); return; }
+  const lang = document.getElementById('cpLang')?.value || 'en';
+
+  cpRunning = true; cpLogs = [];
+  document.getElementById('cpBody').innerHTML = `
+    <div id="cpProgress" style="padding:20px">
+      <div class="cp-log" id="cpLog"></div>
+      <div style="padding:12px 20px 0">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px" id="cpStatusText">Đang khởi động...</div>
+        <div class="cp-progress"><div class="cp-progress-bar" id="cpBar" style="width:0%"></div></div>
+      </div>
+    </div>`;
+
+  const addLog = (msg) => {
+    cpLogs.push(msg);
+    const el = document.getElementById('cpLog');
+    if(el){ el.innerHTML += '<div class="cp-log-line">'+msg+'</div>'; el.scrollTop = el.scrollHeight; }
+  };
+  const setProgress = (pct, txt) => {
+    const bar = document.getElementById('cpBar');
+    const status = document.getElementById('cpStatusText');
+    if(bar) bar.style.width = pct+'%';
+    if(status) status.textContent = txt;
+  };
+
+  try {
+    // ── STEP 1: Fetch & parse sitemap ──
+    addLog('→ Đang fetch sitemap...');
+    setProgress(5, 'Fetching sitemap...');
+    let urls = [];
+
+    if(input.startsWith('http')){
+      urls = await fetchSitemapUrls(input, addLog);
+    } else {
+      // Paste list of URLs
+      urls = input.split('\n').map(l=>l.trim()).filter(l=>l.startsWith('http'));
+      addLog('✓ Đọc '+urls.length+' URLs từ danh sách');
+    }
+
+    if(!urls.length) throw new Error('Không tìm thấy URL nào. Kiểm tra lại sitemap URL.');
+    addLog('✓ Tổng: '+urls.length+' URLs');
+    setProgress(20, 'Đã fetch '+urls.length+' URLs');
+
+    // ── STEP 2: Filter content URLs ──
+    const contentUrls = urls.filter(u => {
+      const path = u.replace(/^https?:\/\/[^\/]+/,'');
+      return !/\/(tag|author|page\/\d|feed|wp-json|wp-admin|wp-content|category|\.jpg|\.png|\.pdf)/i.test(path)
+        && !/\/(page)\/\d+\/?$/.test(path);
+    });
+    addLog('→ Sau khi lọc: '+contentUrls.length+' content URLs');
+    setProgress(25, 'Đang phân tích cấu trúc...');
+
+    // ── STEP 3: Extract slug info ──
+    const pages = contentUrls.map(url => {
+      const path = url.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/,'');
+      const slug = path.split('/').filter(Boolean).pop() || '';
+      const words = slug.replace(/-/g,' ').replace(/[^a-z0-9 ]/gi,'').toLowerCase().split(' ').filter(w=>w.length>2);
+      return { url, slug, path, words, title: '' };
+    });
+
+    addLog('→ Đang gọi AI phân tích pillar-cluster...');
+    setProgress(30, 'AI đang phân tích cấu trúc topic...');
+
+    // ── STEP 4: AI batch analysis ──
+    const domain = input.match(/^https?:\/\/([^\/]+)/)?.[1] || 'website';
+    const BATCH = 80; // send up to 80 URLs per call
+    const batches = [];
+    for(let i=0; i<pages.length; i+=BATCH) batches.push(pages.slice(i,i+BATCH));
+
+    let allClusters = [];
+    let allGaps = [];
+    let allOrphans = [];
+    let allNewTopics = [];
+
+    for(let bi=0; bi<batches.length; bi++){
+      const batch = batches[bi];
+      setProgress(30 + (bi/batches.length)*50, 'AI phân tích batch '+(bi+1)+'/'+batches.length+'...');
+      addLog('→ Batch '+(bi+1)+'/'+batches.length+': phân tích '+batch.length+' trang');
+
+      const urlList = batch.map((p,i)=>(i+1)+'. '+p.url).join('\n');
+
+      const prompt = 'You are an expert SEO content strategist. Analyze these URLs from a website and create a content plan.\n\n'
+        +'WEBSITE: '+domain+'\n'
+        +'OUTPUT LANGUAGE: '+lang+'\n\n'
+        +'URLs to analyze:\n'+urlList+'\n\n'
+        +'TASK: Group these URLs into topic clusters using pillar-cluster architecture.\n\n'
+        +'Rules:\n'
+        +'- Each cluster needs 1 PILLAR (broad topic page) and 1+ CLUSTERs (specific sub-topics)\n'
+        +'- Identify ORPHAN pages that don\'t fit any cluster\n'
+        +'- Identify CONTENT GAPS: missing articles each cluster needs\n'
+        +'- Suggest NEW TOPICS to expand the site\'s topical authority\n'
+        +'- All suggested articles must be SEO+GEO optimized (E-E-A-T signals, search intent matched, schema-ready)\n\n'
+        +'Return ONLY compact JSON:\n'
+        +'{\n'
+        +'"clusters":[\n'
+        +'  {"topic":"Topic Name","pillar_url":"url","pillar_title":"title","clusters":[{"url":"url","title":"inferred title","role":"cluster"}],"tags":["tag1","tag2"],"health":"strong|thin|critical"}\n'
+        +'],\n'
+        +'"gaps":[\n'
+        +'  {"topic":"Topic Name","type":"missing cost guide","title":"Suggested Title","keyword":"target keyword","slug":"/blog/slug/","wordcount":1500,"priority":"high|medium|low","intent":"commercial|informational|navigational","schema":"Article|FAQPage|HowTo","geo_signal":"Include Calgary/location for local SEO"}\n'
+        +'],\n'
+        +'"orphans":["url1","url2"],\n'
+        +'"new_topics":[\n'
+        +'  {"topic":"New Topic","rationale":"why this topic","articles":[{"title":"Article Title","keyword":"kw","slug":"/blog/slug/","priority":"high|medium"}]}\n'
+        +']\n'
+        +'}';
+
+      try {
+        const resp = await fetch('https://openrouter.ai/api/v1/chat/completions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
+          body: JSON.stringify({model:getAIModel(), max_tokens:4000, messages:[{role:'user',content:prompt}]})
+        });
+        if(!resp.ok) throw new Error('AI error '+resp.status);
+        const aiData = await resp.json();
+        const txt = (aiData.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
+        const jsonM = txt.match(/\{[\s\S]*\}/);
+        if(jsonM){
+          const parsed = JSON.parse(jsonM[0]);
+          allClusters.push(...(parsed.clusters||[]));
+          allGaps.push(...(parsed.gaps||[]));
+          allOrphans.push(...(parsed.orphans||[]));
+          allNewTopics.push(...(parsed.new_topics||[]));
+          addLog('✓ Batch '+(bi+1)+': '+( parsed.clusters||[]).length+' clusters, '+(parsed.gaps||[]).length+' gaps');
+        }
+      } catch(err){ addLog('⚠ Batch '+(bi+1)+' lỗi: '+err.message); }
+
+      if(bi < batches.length-1) await new Promise(r=>setTimeout(r,1500));
+    }
+
+    setProgress(85, 'Đang tổng hợp kết quả...');
+    addLog('→ Tổng hợp: '+allClusters.length+' clusters, '+allGaps.length+' gaps, '+allOrphans.length+' orphans');
+
+    cpData = { domain, urls: contentUrls, clusters: allClusters, gaps: allGaps, orphans: allOrphans, newTopics: allNewTopics, lang, date: new Date().toLocaleDateString('vi-VN') };
+    localStorage.setItem('genseo_cp', JSON.stringify(cpData));
+    // Update tab count
+    const cnt = document.getElementById('tb-cp-cnt');
+    if(cnt) cnt.textContent = allClusters.length;
+
+    setProgress(100, 'Hoàn thành!');
+    addLog('✅ Phân tích xong! '+allClusters.length+' topic clusters, '+allGaps.length+' content gaps');
+    await new Promise(r=>setTimeout(r,800));
+
+    document.getElementById('cpBody').innerHTML = renderCPResults();
+
+  } catch(e){
+    document.getElementById('cpBody').innerHTML = '<div style="padding:20px 24px"><div style="background:#7f1d1d22;border:1px solid #f8717133;border-radius:8px;padding:14px;font-size:13px;color:#f87171">✗ '+e.message+'</div></div>';
+    addLog('✗ Lỗi: '+e.message);
+  }
+  cpRunning = false;
+}
+
+async function fetchSitemapUrls(url, addLog){
+  const cors = 'https://api.allorigins.win/get?url=';
+  try {
+    const r = await fetch(cors+encodeURIComponent(url));
+    const d = await r.json();
+    const xml = d.contents || '';
+    // Check if sitemap index
+    if(xml.includes('<sitemapindex')){
+      addLog('→ Sitemap index detected — fetching child sitemaps...');
+      const childUrls = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].trim());
+      let all = [];
+      for(const cu of childUrls.slice(0,10)){
+        try {
+          const cr = await fetch(cors+encodeURIComponent(cu));
+          const cd = await cr.json();
+          const locs = [...(cd.contents||'').matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].trim()).filter(u=>/https?:\/\//.test(u));
+          all.push(...locs);
+          addLog('  → '+cu.split('/').pop()+': '+locs.length+' URLs');
+          await new Promise(r=>setTimeout(r,500));
+        } catch(e){ addLog('  ⚠ Skip '+cu); }
+      }
+      return all;
+    } else {
+      const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].trim()).filter(u=>/https?:\/\//.test(u));
+      return locs;
+    }
+  } catch(e){
+    // Fallback: try without cors proxy
+    addLog('⚠ CORS proxy failed, trying direct fetch...');
+    const r2 = await fetch(url);
+    const xml2 = await r2.text();
+    return [...xml2.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>m[1].trim()).filter(u=>/https?:\/\//.test(u));
+  }
+}
+
+function renderCPResults(){
+  if(!cpData) return '';
+  const { domain, urls, clusters, gaps, orphans, newTopics, date } = cpData;
+  const fmtNum = n => n>=1000?(n/1000).toFixed(1)+'K':String(n);
+
+  const priorityColor = p => p==='high'?'#f87171':p==='medium'?'#f59e0b':'#4ade80';
+  const priorityBg = p => p==='high'?'cp-gap-high':p==='medium'?'cp-gap-medium':'cp-gap-low';
+  const healthIcon = h => h==='strong'?'✅':h==='thin'?'⚠️':'❌';
+  const healthColor = h => h==='strong'?'var(--green)':h==='thin'?'#f59e0b':'#f87171';
+
+  // Group gaps by topic
+  const gapsByTopic = {};
+  gaps.forEach(g => { (gapsByTopic[g.topic]=gapsByTopic[g.topic]||[]).push(g); });
+
+  // Summary counts
+  const totalClusters = clusters.reduce((a,c)=>a+(c.clusters||[]).length,0);
+  const highGaps = gaps.filter(g=>g.priority==='high').length;
+
+  return `
+    <!-- Stats bar -->
+    <div class="cp-stats">
+      <div class="cp-stat"><div class="cp-stat-num" style="color:var(--green)">${urls.length}</div><div class="cp-stat-lbl">URLs Scanned</div></div>
+      <div class="cp-stat"><div class="cp-stat-num" style="color:#60a5fa">${clusters.length}</div><div class="cp-stat-lbl">Topic Clusters</div></div>
+      <div class="cp-stat"><div class="cp-stat-num" style="color:#a855f7">${totalClusters}</div><div class="cp-stat-lbl">Cluster Pages</div></div>
+      <div class="cp-stat"><div class="cp-stat-num" style="color:#f87171">${highGaps}</div><div class="cp-stat-lbl">High Priority Gaps</div></div>
+      <div class="cp-stat"><div class="cp-stat-num" style="color:#f59e0b">${orphans.length}</div><div class="cp-stat-lbl">Orphan Pages</div></div>
+    </div>
+
+    <!-- Tab nav inside Content Plan -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);padding:0 16px;overflow-x:auto">
+      ${[['cp-arch','🏛️ Architecture'],['cp-gaps','🔍 Content Gaps'],['cp-newtopics','💡 New Topics'],['cp-orphans','🔗 Orphans']].map((t,i)=>`
+        <button id="${t[0]}-btn" class="t-tab ${i===0?'active':''}" onclick="showCPTab('${t[0]}')" style="font-size:12px;padding:10px 14px;white-space:nowrap">${t[1]}</button>
+      `).join('')}
+    </div>
+    <div id="cpTabContent">
+      ${renderCPArchTab(clusters, gapsByTopic, healthIcon, healthColor)}
+    </div>`;
+}
+
+function showCPTab(tabId){
+  document.querySelectorAll('[id$="-btn"]').forEach(b=>{ if(b.id.startsWith('cp-')) b.classList.remove('active'); });
+  document.getElementById(tabId+'-btn')?.classList.add('active');
+  const { clusters, gaps, orphans, newTopics } = cpData;
+  const priorityColor = p => p==='high'?'#f87171':p==='medium'?'#f59e0b':'#4ade80';
+  const healthIcon = h => h==='strong'?'✅':h==='thin'?'⚠️':'❌';
+  const healthColor = h => h==='strong'?'var(--green)':h==='thin'?'#f59e0b':'#f87171';
+  const gapsByTopic = {};
+  gaps.forEach(g => { (gapsByTopic[g.topic]=gapsByTopic[g.topic]||[]).push(g); });
+
+  const el = document.getElementById('cpTabContent');
+  if(!el) return;
+  if(tabId==='cp-arch') el.innerHTML = renderCPArchTab(clusters, gapsByTopic, healthIcon, healthColor);
+  else if(tabId==='cp-gaps') el.innerHTML = renderCPGapsTab(gaps, priorityColor);
+  else if(tabId==='cp-newtopics') el.innerHTML = renderCPNewTopicsTab(newTopics||[]);
+  else if(tabId==='cp-orphans') el.innerHTML = renderCPOrphansTab(cpData.orphans);
+}
+
+function renderCPArchTab(clusters, gapsByTopic, healthIcon, healthColor){
+  if(!clusters.length) return '<div style="padding:24px;color:var(--text3);font-size:12px">Chưa có dữ liệu</div>';
+  return '<div style="padding:16px">'
+    +clusters.map((c,ci)=>{
+      const gaps = gapsByTopic[c.topic]||[];
+      const clusterRows = (c.clusters||[]).map(p=>`
+        <div class="cp-post-row">
+          <span class="cp-role-pill cp-role-cluster">CLUSTER</span>
+          <div style="overflow:hidden">
+            <div style="font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.title||p.url.split('/').filter(Boolean).pop()||p.url}</div>
+            <div style="font-size:10.5px;color:var(--text3)">${p.url.replace(/^https?:\/\/[^\/]+/,'')}</div>
+          </div>
+          <a href="${p.url}" target="_blank" style="color:var(--text3);font-size:10.5px">🔗</a>
+          <div style="font-size:10px;color:var(--text3)">CLUSTER</div>
+        </div>`).join('');
+
+      const gapPills = gaps.map(g=>`<span style="font-size:10px;background:${g.priority==='high'?'#7f1d1d22':'#78350f22'};color:${g.priority==='high'?'#f87171':'#f59e0b'};border:1px solid ${g.priority==='high'?'#f8717133':'#f59e0b33'};border-radius:4px;padding:2px 6px;margin-right:4px">${g.type||'gap'}</span>`).join('');
+
+      return `<div class="cp-cluster">
+        <div class="cp-cluster-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <div class="cp-cluster-title">${c.topic}</div>
+          <div class="cp-cluster-meta">
+            ${(c.tags||[]).map(t=>`<span class="cp-cluster-badge">#${t}</span>`).join('')}
+            ${gaps.length?`<span class="cp-gap-badge">⚠ ${gaps.length} gaps</span>`:''}
+            <span style="font-size:11px;color:${healthColor(c.health)}">${healthIcon(c.health)} ${c.clusters?.length||0} clusters</span>
+            <span style="font-size:12px;color:var(--text3)">▾</span>
+          </div>
+        </div>
+        <div class="cp-cluster-body">
+          <!-- Pillar -->
+          <div class="cp-post-row" style="background:var(--gdim);border-radius:4px;padding:8px 8px;margin-bottom:4px">
+            <span class="cp-role-pill cp-role-pillar">PILLAR</span>
+            <div style="overflow:hidden">
+              <div style="font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.pillar_title||c.topic}</div>
+              <div style="font-size:10.5px;color:var(--text3)">${(c.pillar_url||'').replace(/^https?:\/\/[^\/]+/,'')}</div>
+            </div>
+            <a href="${c.pillar_url||'#'}" target="_blank" style="color:var(--text3);font-size:10.5px">🔗</a>
+            <div></div>
+          </div>
+          ${clusterRows}
+          ${gaps.length?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><div style="font-size:10.5px;font-weight:600;color:var(--text3);margin-bottom:4px">CONTENT GAPS:</div>${gapPills}</div>`:''}
+        </div>
+      </div>`;
+    }).join('')
+    +'</div>';
+}
+
+function renderCPGapsTab(gaps, priorityColor){
+  if(!gaps.length) return '<div style="padding:24px;color:var(--green);font-size:12px">✅ Không phát hiện content gap!</div>';
+  const sorted = [...gaps].sort((a,b)=>({high:0,medium:1,low:2}[a.priority]||1)-({high:0,medium:1,low:2}[b.priority]||1));
+  return '<div style="padding:16px">'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:14px">'+gaps.length+' content gaps — sắp xếp theo độ ưu tiên</div>'
+    +sorted.map(g=>`
+      <div class="cp-gap-item cp-gap-${g.priority||'medium'}">
+        <div style="min-width:80px;text-align:center">
+          <div style="font-size:18px">${g.priority==='high'?'🔴':g.priority==='low'?'🟢':'🟡'}</div>
+          <div style="font-size:9px;font-weight:700;color:${priorityColor(g.priority||'medium')};text-transform:uppercase">${g.priority||'medium'}</div>
+        </div>
+        <div style="flex:1">
+          <div class="cp-gap-title">${g.title||'Untitled'}</div>
+          <div class="cp-gap-kw">🔑 ${g.keyword||'—'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;display:flex;gap:12px;flex-wrap:wrap">
+            <span>📁 Topic: <strong style="color:var(--text2)">${g.topic||'—'}</strong></span>
+            <span>📄 Type: ${g.type||'—'}</span>
+            <span>📏 ${g.wordcount||1200}w</span>
+            <span>🎯 ${g.intent||'informational'}</span>
+            ${g.schema?`<span>🏷 Schema: ${g.schema}</span>`:''}
+          </div>
+          ${g.slug?`<div style="font-size:10.5px;color:var(--text3);margin-top:4px;font-family:'JetBrains Mono',monospace">🔗 ${g.slug}</div>`:''}
+          ${g.geo_signal?`<div style="font-size:10.5px;color:#60a5fa;margin-top:3px">🌍 GEO: ${g.geo_signal}</div>`:''}
+        </div>
+        <button class="btn-outline" style="font-size:10.5px;white-space:nowrap;align-self:flex-start"
+          onclick="createFromGap(${JSON.stringify(g).replace(/"/g,'&quot;')})">
+          + Tạo bài
+        </button>
+      </div>`).join('')
+    +'</div>';
+}
+
+function renderCPNewTopicsTab(newTopics){
+  if(!newTopics.length) return '<div style="padding:24px;color:var(--text3);font-size:12px">Chưa có dữ liệu topic mở rộng</div>';
+  return '<div style="padding:16px">'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:14px">'+newTopics.length+' topic mới nên phát triển để mở rộng topical authority</div>'
+    +newTopics.map(t=>`
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:16px">💡</span>
+          <div style="font-size:13px;font-weight:600">${t.topic}</div>
+        </div>
+        <div style="font-size:11.5px;color:var(--text3);margin-bottom:10px">${t.rationale||''}</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${(t.articles||[]).map(a=>`
+            <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:6px;padding:8px 12px">
+              <span style="font-size:10px;background:${a.priority==='high'?'#7f1d1d22':'#78350f22'};color:${a.priority==='high'?'#f87171':'#f59e0b'};border:1px solid ${a.priority==='high'?'#f8717133':'#f59e0b33'};border-radius:4px;padding:2px 5px;font-weight:700">${(a.priority||'medium').toUpperCase()}</span>
+              <div style="flex:1">
+                <div style="font-size:12.5px;font-weight:500">${a.title||'Untitled'}</div>
+                <div style="font-size:10.5px;color:var(--text3);font-family:'JetBrains Mono',monospace">${a.slug||''}</div>
+              </div>
+              <div style="font-size:10.5px;color:var(--text3)">${a.keyword||''}</div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('')
+    +'</div>';
+}
+
+function renderCPOrphansTab(orphans){
+  if(!orphans||!orphans.length) return '<div style="padding:24px;color:var(--green);font-size:12px">✅ Không có orphan page!</div>';
+  return '<div style="padding:16px">'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+orphans.length+' trang không thuộc topic cluster nào — cần xử lý</div>'
+    +'<table class="seo-table"><thead><tr><th>URL</th><th>Gợi ý</th></tr></thead><tbody>'
+    +orphans.map(url=>{
+      const slug = url.replace(/^https?:\/\/[^\/]+/,'').substring(0,60)||'/';
+      return '<tr><td><a href="'+url+'" target="_blank" style="color:var(--text2);text-decoration:none">'+slug+'</a></td>'
+        +'<td style="color:var(--text3);font-size:11px">Cần thêm internal links hoặc gộp vào cluster phù hợp</td></tr>';
+    }).join('')
+    +'</tbody></table></div>';
+}
+
+function createFromGap(gap){
+  // Pre-fill the article creation modal with gap data
+  openModal();
+  setTimeout(()=>{
+    const titleInput = document.getElementById('kw-input');
+    if(titleInput && gap.title) titleInput.value = gap.title;
+  }, 300);
+  toast('Đã điền thông tin bài viết từ content gap','ok');
+}
+
+// Load saved CP data
+const _savedCP = localStorage.getItem('genseo_cp');
+if(_savedCP){ try{ cpData = JSON.parse(_savedCP); const cnt=document.getElementById('tb-cp-cnt'); if(cnt) cnt.textContent=cpData.clusters?.length||0; }catch(e){} }
 
 // ── IL SETTINGS ──
 function getILSettings(){ return JSON.parse(localStorage.getItem('genseo_il_settings')||'{"maxLinks":5}'); }
