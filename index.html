@@ -3202,6 +3202,44 @@ async function runContentPlan(){
     const pct = Math.round(classifiedCount / contentUrls.length * 100);
     addLog('✅ Coverage: '+classifiedCount+'/'+contentUrls.length+' URLs ('+pct+'%)');
 
+    // ── Pass 3: Dedicated new_topics call — riêng biệt, đủ tokens ──
+    setProgress(87, 'Generating new topic suggestions...');
+    addLog('→ Pass 3: Tạo new topics chuyên sâu...');
+    try {
+      const existingTopics = allClusters.map(c=>c.topic).join(', ');
+      const existingSlugs = contentUrls.map(u=>u.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/, '')).join('\n');
+      const ntPrompt = 'Senior SEO & GEO content strategist for '+domain+'.\n\n'
+        +'EXISTING TOPICS: '+existingTopics+'\n\n'
+        +'EXISTING URLS (do NOT repeat these):\n'+existingSlugs+'\n\n'
+        +'TASK: Suggest 4-6 BRAND NEW topic areas this site should develop to expand topical authority.\n'
+        +'For each topic, create 6-8 diverse articles mixing:\n'
+        +'- Informational: how-to guides, tips, explanations (prefix intent: "informational")\n'
+        +'- Commercial: best/top/cost/compare articles (prefix intent: "commercial")\n'
+        +'- Local GEO: city/region-specific variants like Calgary, Edmonton, Alberta (prefix intent: "local")\n\n'
+        +'Rules:\n'
+        +'- Each article title must be specific and SEO-ready (not generic)\n'
+        +'- Keyword must be the exact primary keyword to target\n'
+        +'- Slug must be URL-friendly lowercase with hyphens\n'
+        +'- NEVER repeat slugs from EXISTING URLS above\n\n'
+        +'Return ONLY JSON array (no markdown):\n'
+        +'[{"topic":"Topic Name","rationale":"1-sentence why this topic matters for SEO authority","articles":['
+        +'{"title":"Full SEO Title","keyword":"primary keyword phrase","slug":"/blog/url-slug/","intent":"informational|commercial|local"},'
+        +'... 6-8 articles total ...'
+        +']}]';
+
+      const timeoutNT = new Promise((_,rej)=>setTimeout(()=>rej(new Error('NT timeout')),50000));
+      const ntTxt = await Promise.race([callAIUniversal([{role:'user',content:ntPrompt}], 4000), timeoutNT]);
+      const ntClean = ntTxt.replace(/```json|```/g,'').trim();
+      const ntMatch = ntClean.match(/\[[\s\S]*\]/);
+      if(ntMatch){
+        const ntParsed = JSON.parse(ntMatch[0]);
+        if(Array.isArray(ntParsed) && ntParsed.length){
+          allNewTopics = ntParsed; // replace với data chất lượng cao
+          addLog('✓ New topics: '+ntParsed.length+' topics, '+ntParsed.reduce((a,t)=>a+(t.articles||[]).length,0)+' articles');
+        }
+      }
+    } catch(e){ addLog('⚠ New topics pass lỗi: '+e.message.substring(0,60)); }
+
     cpData = { domain, urls: contentUrls, clusters: allClusters, gaps: allGaps, orphans: allOrphans, newTopics: allNewTopics, lang, date: new Date().toLocaleDateString('vi-VN') };
     localStorage.setItem('genseo_cp', JSON.stringify(cpData));
     // Update tab count
