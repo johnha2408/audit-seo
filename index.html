@@ -711,6 +711,8 @@ let plans = JSON.parse(localStorage.getItem('genseo_plans') || '[]');
 let curPlan = null;
 let selSched = 'immediate';
 let selItems = new Set();
+let curView = 'plans'; // declare early so showView() works from HTML onclick
+let ilData = JSON.parse(localStorage.getItem('genseo_il') || 'null');
 
 function savePlans(){ localStorage.setItem('genseo_plans', JSON.stringify(plans)); }
 
@@ -1198,7 +1200,7 @@ function exportCSV(){
 function updateTopbarCounts(){
   document.getElementById('tb-plan-cnt').textContent=plans.length;
   const total=plans.reduce((a,p)=>a+(p.total_articles||0),0);
-  document.getElementById('tb-art-cnt').textContent=total;
+  const artEl=document.getElementById('tb-art-cnt')||document.getElementById('tb-queue-cnt'); if(artEl) artEl.textContent=total;
   const el=document.getElementById('sb-arts'); if(el)el.textContent=total;
 }
 function toast(msg,type='ok'){
@@ -1207,9 +1209,7 @@ function toast(msg,type='ok'){
   setTimeout(()=>t.className='toast',3200);
 }
 // ── VIEW SWITCHER ──
-let curView = 'plans'; // 'plans' | 'il'
-let ilData = JSON.parse(localStorage.getItem('genseo_il') || 'null');
-// ilData = { posts:[], suggestions:{}, applied:{}, scannedAt, stats }
+// curView and ilData declared at top of STATE block
 
 function showView(view){
   curView = view;
