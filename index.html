@@ -3103,82 +3103,89 @@ async function runContentPlan(){
     setProgress(85, 'Đang tổng hợp kết quả...');
     addLog('→ Tổng hợp ban đầu: '+allClusters.length+' clusters, '+allClusters.reduce((a,c)=>a+(c.clusters||[]).length,0)+' pages phân loại');
 
-    // ── Pass 2: Auto-classify URLs chưa được phân loại ─────────────────
-    // Collect tất cả URLs đã được AI phân loại
-    const classifiedUrls = new Set();
+    // ── Pass 2: Auto-classify URLs chưa được phân loại (mỗi URL chỉ gán 1 lần) ──
+    // Bước 1: Chuẩn hóa tất cả URLs đã phân loại vào Set duy nhất
+    const normalize = u => (u||'').replace(/\/$/, '').toLowerCase().trim();
+    const classifiedSet = new Set();
+
+    // Deduplicate AI output trước — xóa URLs trùng giữa các cluster
     allClusters.forEach(c => {
-      if(c.pillar_url) classifiedUrls.add(c.pillar_url.replace(/\/$/, '').toLowerCase());
-      (c.clusters||[]).forEach(p => { if(p.url) classifiedUrls.add(p.url.replace(/\/$/, '').toLowerCase()); });
-    });
-    allOrphans.forEach(u => classifiedUrls.add(u.replace(/\/$/, '').toLowerCase()));
+      // Normalize pillar_url — AI hay trả về slug thay vì full URL
+      if(c.pillar_url && !c.pillar_url.startsWith('http')){
+        c.pillar_url = 'https://'+domain + (c.pillar_url.startsWith('/')?'':'/') + c.pillar_url;
+      }
+      if(c.pillar_url) classifiedSet.add(normalize(c.pillar_url));
 
-    // Tìm URLs chưa được phân loại
-    const unclassified = contentUrls.filter(url => {
-      const norm = url.replace(/\/$/, '').toLowerCase();
-      return !classifiedUrls.has(norm);
+      const seen = new Set();
+      c.clusters = (c.clusters||[]).filter(p => {
+        // Fix URL nếu chỉ là slug
+        if(p.url && !p.url.startsWith('http')){
+          p.url = 'https://'+domain + (p.url.startsWith('/')?'':'/') + p.url;
+        }
+        const n = normalize(p.url);
+        if(seen.has(n) || classifiedSet.has(n)) return false; // bỏ trùng
+        seen.add(n); classifiedSet.add(n);
+        return true;
+      });
     });
+    allOrphans.forEach(u => classifiedSet.add(normalize(u)));
 
-    addLog('→ Chưa phân loại: '+unclassified.length+'/'+contentUrls.length+' URLs — đang tự động gán...');
+    // Bước 2: Tìm URLs thực sự chưa phân loại
+    const unclassified = contentUrls.filter(url => !classifiedSet.has(normalize(url)));
+    addLog('→ Chưa phân loại: '+unclassified.length+'/'+contentUrls.length+' URLs');
 
     if(unclassified.length > 0 && allClusters.length > 0){
-      // Client-side keyword matching — không cần AI
-      // Mỗi URL chưa phân loại → tìm cluster có keyword overlap cao nhất
-      const getKeywords = url => {
+      const getSlugWords = url => {
         const slug = url.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/, '').split('/').pop() || '';
-        return slug.split('-').filter(w => w.length > 2);
+        return slug.split('-').filter(w => w.length > 2 && !['the','and','for','with','how','what','why','are','blog'].includes(w));
       };
 
-      const clusterKeywords = allClusters.map(c => {
-        const words = new Set([
-          ...(c.topic||'').toLowerCase().split(/\s+/),
-          ...(c.tags||[]).flatMap(t => t.split('-')),
-          ...(c.pillar_title||'').toLowerCase().split(/\s+/),
-          ...(c.clusters||[]).flatMap(p => getKeywords(p.url||'')),
-        ].filter(w => w.length > 2));
+      // Build keyword index cho mỗi cluster từ: topic, tags, pillar title, existing cluster slugs
+      const clusterIndex = allClusters.map(c => {
+        const words = new Set();
+        (c.topic||'').toLowerCase().split(/\s+/).forEach(w => w.length>2 && words.add(w));
+        (c.tags||[]).forEach(t => t.split('-').forEach(w => w.length>2 && words.add(w)));
+        (c.pillar_title||'').toLowerCase().split(/\s+/).forEach(w => w.length>2 && words.add(w));
+        (c.clusters||[]).forEach(p => getSlugWords(p.url||'').forEach(w => words.add(w)));
         return words;
       });
 
       let autoAssigned = 0;
       unclassified.forEach(url => {
-        const urlWords = getKeywords(url);
+        const urlWords = getSlugWords(url);
         if(!urlWords.length){ allOrphans.push(url); return; }
 
-        // Score each cluster
+        // Tính score: số từ match / tổng từ trong slug
         let bestScore = 0, bestIdx = -1;
-        clusterKeywords.forEach((cWords, ci) => {
-          const matches = urlWords.filter(w => cWords.has(w) || [...cWords].some(cw => cw.includes(w) || w.includes(cw))).length;
+        clusterIndex.forEach((cWords, ci) => {
+          let matches = 0;
+          urlWords.forEach(w => {
+            if(cWords.has(w)) matches += 1;
+            else if([...cWords].some(cw => cw.length>3 && (cw.includes(w)||w.includes(cw)))) matches += 0.5;
+          });
           const score = matches / urlWords.length;
           if(score > bestScore){ bestScore = score; bestIdx = ci; }
         });
 
-        const slug = url.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/, '').split('/').pop() || url;
+        const slug = url.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/, '').split('/').pop() || '';
         const title = slug.split('-').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
 
-        if(bestScore >= 0.2 && bestIdx >= 0){
-          // Assign to best matching cluster
-          if(!allClusters[bestIdx].clusters) allClusters[bestIdx].clusters = [];
+        if(bestIdx >= 0 && bestScore > 0){ // score > 0 là đủ để gán
           allClusters[bestIdx].clusters.push({ url, title, role:'cluster', autoAssigned: true });
+          classifiedSet.add(normalize(url)); // đánh dấu đã gán, tránh gán lại
           autoAssigned++;
         } else {
-          // No match → thêm vào cluster gần nhất có score > 0, hoặc orphan
-          const anyMatch = clusterKeywords.findIndex((cw, ci) =>
-            urlWords.some(w => [...cw].some(cw2 => cw2.includes(w)||w.includes(cw2)))
-          );
-          if(anyMatch >= 0){
-            if(!allClusters[anyMatch].clusters) allClusters[anyMatch].clusters = [];
-            allClusters[anyMatch].clusters.push({ url, title, role:'cluster', autoAssigned: true, lowConfidence: true });
-            autoAssigned++;
-          } else {
-            allOrphans.push(url);
-          }
+          allOrphans.push(url);
         }
       });
 
-      addLog('✓ Auto-assigned: '+autoAssigned+' URLs → clusters, '+(unclassified.length-autoAssigned)+' → orphans');
+      addLog('✓ Auto-assigned: '+autoAssigned+'/'+unclassified.length+' → clusters');
     }
 
-    const totalClassified = allClusters.reduce((a,c)=>a+1+(c.clusters||[]).length, 0);
-    addLog('✅ Coverage: '+totalClassified+'/'+contentUrls.length+' URLs đã phân loại ('+Math.round(totalClassified/contentUrls.length*100)+'%)');
+    // Bước 3: Tính coverage chính xác dựa trên contentUrls gốc
+    const classifiedCount = contentUrls.filter(u => classifiedSet.has(normalize(u))).length;
+    const pct = Math.round(classifiedCount / contentUrls.length * 100);
+    addLog('✅ Coverage: '+classifiedCount+'/'+contentUrls.length+' URLs ('+pct+'%)');
 
     cpData = { domain, urls: contentUrls, clusters: allClusters, gaps: allGaps, orphans: allOrphans, newTopics: allNewTopics, lang, date: new Date().toLocaleDateString('vi-VN') };
     localStorage.setItem('genseo_cp', JSON.stringify(cpData));
@@ -3342,19 +3349,25 @@ function showCPTab(tabId){
 function renderCPArchTab(clusters, gapsByTopic, healthIcon, healthColor){
   if(!clusters.length) return '<div style="padding:24px;color:var(--text3);font-size:12px">Chưa có dữ liệu</div>';
 
-  // Tính tổng số bài đã được phân loại
-  const totalClassified = clusters.reduce((a,c)=>a+1+(c.clusters||[]).length, 0);
+  // Tính coverage chính xác: đếm unique URLs được phân loại trong contentUrls gốc
   const totalScanned = cpData?.urls?.length || 0;
-  const orphanCount = cpData?.orphans?.length || 0;
-  const unclassified = totalScanned - totalClassified - orphanCount;
+  const orphanCount = (cpData?.orphans||[]).length;
+  const norm = u => (u||'').replace(/\/$/, '').toLowerCase().trim();
+  const classifiedSet2 = new Set();
+  clusters.forEach(c => {
+    if(c.pillar_url) classifiedSet2.add(norm(c.pillar_url));
+    (c.clusters||[]).forEach(p => { if(p.url) classifiedSet2.add(norm(p.url)); });
+  });
+  const classifiedCount = (cpData?.urls||[]).filter(u => classifiedSet2.has(norm(u))).length;
+  const unclassifiedCount = totalScanned - classifiedCount - orphanCount;
+  const pct = totalScanned ? Math.round(classifiedCount/totalScanned*100) : 0;
 
   return '<div style="padding:16px">'
-    // Coverage summary bar
     +'<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:14px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px">'
     +'<span>📊 Tổng quét: <strong style="color:var(--text)">'+totalScanned+'</strong> URLs</span>'
-    +'<span>✅ Đã phân loại: <strong style="color:var(--green)">'+totalClassified+'</strong> bài ('+Math.round(totalClassified/totalScanned*100)+'%)</span>'
+    +'<span>✅ Đã phân loại: <strong style="color:'+(pct>=90?'var(--green)':pct>=70?'#f59e0b':'#f87171')+'">'+classifiedCount+'</strong> bài ('+pct+'%)</span>'
     +'<span>🔗 Orphan: <strong style="color:#f59e0b">'+orphanCount+'</strong></span>'
-    +(unclassified>0?'<span style="color:#f87171">⚠ Chưa phân loại: <strong>'+unclassified+'</strong> bài</span>':'')
+    +(unclassifiedCount>0?'<span style="color:#f87171">⚠ Chưa phân loại: <strong>'+unclassifiedCount+'</strong></span>':'<span style="color:var(--green)">✓ 100% coverage</span>')
     +'</div>'
     +clusters.map((c,ci)=>{
       const gaps = gapsByTopic[c.topic]||[];
