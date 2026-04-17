@@ -3698,6 +3698,26 @@ function renderCPOrphansTab(orphans){
     +'</tbody></table></div>';
 }
 
+function addAllGapsToQueue(){
+  if(!cpData) return;
+  const gaps = cpData.gaps || [];
+  const competitorGaps = cpData._competitorGaps || [];
+  const all = [...gaps, ...competitorGaps];
+  const q = getArticleQueue();
+  const keys = new Set(q.map(x=>x.slug||x.title));
+  let added = 0;
+  all.forEach(g => {
+    const key = g.slug||g.title;
+    if(!keys.has(key)){
+      q.push({ title:g.title||'', slug:g.slug||'', topic:g.topic||'', keyword:g.keyword||'', source:g.competitor?'competitor':'ai', addedAt:new Date().toLocaleDateString('vi-VN') });
+      keys.add(key); added++;
+    }
+  });
+  saveArticleQueue(q);
+  toast('✓ Đã thêm '+added+'/'+all.length+' bài vào danh sách','ok');
+  showCPTab('cp-gaps');
+}
+
 async function searchCompetitorGaps(){
   const apiKey = getApiKey();
   if(!apiKey){ toast('Cần OpenRouter API Key','err'); return; }
