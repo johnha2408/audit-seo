@@ -3101,7 +3101,84 @@ async function runContentPlan(){
     }
 
     setProgress(85, 'Đang tổng hợp kết quả...');
-    addLog('→ Tổng hợp: '+allClusters.length+' clusters, '+allGaps.length+' gaps, '+allOrphans.length+' orphans');
+    addLog('→ Tổng hợp ban đầu: '+allClusters.length+' clusters, '+allClusters.reduce((a,c)=>a+(c.clusters||[]).length,0)+' pages phân loại');
+
+    // ── Pass 2: Auto-classify URLs chưa được phân loại ─────────────────
+    // Collect tất cả URLs đã được AI phân loại
+    const classifiedUrls = new Set();
+    allClusters.forEach(c => {
+      if(c.pillar_url) classifiedUrls.add(c.pillar_url.replace(/\/$/, '').toLowerCase());
+      (c.clusters||[]).forEach(p => { if(p.url) classifiedUrls.add(p.url.replace(/\/$/, '').toLowerCase()); });
+    });
+    allOrphans.forEach(u => classifiedUrls.add(u.replace(/\/$/, '').toLowerCase()));
+
+    // Tìm URLs chưa được phân loại
+    const unclassified = contentUrls.filter(url => {
+      const norm = url.replace(/\/$/, '').toLowerCase();
+      return !classifiedUrls.has(norm);
+    });
+
+    addLog('→ Chưa phân loại: '+unclassified.length+'/'+contentUrls.length+' URLs — đang tự động gán...');
+
+    if(unclassified.length > 0 && allClusters.length > 0){
+      // Client-side keyword matching — không cần AI
+      // Mỗi URL chưa phân loại → tìm cluster có keyword overlap cao nhất
+      const getKeywords = url => {
+        const slug = url.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/, '').split('/').pop() || '';
+        return slug.split('-').filter(w => w.length > 2);
+      };
+
+      const clusterKeywords = allClusters.map(c => {
+        const words = new Set([
+          ...(c.topic||'').toLowerCase().split(/\s+/),
+          ...(c.tags||[]).flatMap(t => t.split('-')),
+          ...(c.pillar_title||'').toLowerCase().split(/\s+/),
+          ...(c.clusters||[]).flatMap(p => getKeywords(p.url||'')),
+        ].filter(w => w.length > 2));
+        return words;
+      });
+
+      let autoAssigned = 0;
+      unclassified.forEach(url => {
+        const urlWords = getKeywords(url);
+        if(!urlWords.length){ allOrphans.push(url); return; }
+
+        // Score each cluster
+        let bestScore = 0, bestIdx = -1;
+        clusterKeywords.forEach((cWords, ci) => {
+          const matches = urlWords.filter(w => cWords.has(w) || [...cWords].some(cw => cw.includes(w) || w.includes(cw))).length;
+          const score = matches / urlWords.length;
+          if(score > bestScore){ bestScore = score; bestIdx = ci; }
+        });
+
+        const slug = url.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/, '').split('/').pop() || url;
+        const title = slug.split('-').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+
+        if(bestScore >= 0.2 && bestIdx >= 0){
+          // Assign to best matching cluster
+          if(!allClusters[bestIdx].clusters) allClusters[bestIdx].clusters = [];
+          allClusters[bestIdx].clusters.push({ url, title, role:'cluster', autoAssigned: true });
+          autoAssigned++;
+        } else {
+          // No match → thêm vào cluster gần nhất có score > 0, hoặc orphan
+          const anyMatch = clusterKeywords.findIndex((cw, ci) =>
+            urlWords.some(w => [...cw].some(cw2 => cw2.includes(w)||w.includes(cw2)))
+          );
+          if(anyMatch >= 0){
+            if(!allClusters[anyMatch].clusters) allClusters[anyMatch].clusters = [];
+            allClusters[anyMatch].clusters.push({ url, title, role:'cluster', autoAssigned: true, lowConfidence: true });
+            autoAssigned++;
+          } else {
+            allOrphans.push(url);
+          }
+        }
+      });
+
+      addLog('✓ Auto-assigned: '+autoAssigned+' URLs → clusters, '+(unclassified.length-autoAssigned)+' → orphans');
+    }
+
+    const totalClassified = allClusters.reduce((a,c)=>a+1+(c.clusters||[]).length, 0);
+    addLog('✅ Coverage: '+totalClassified+'/'+contentUrls.length+' URLs đã phân loại ('+Math.round(totalClassified/contentUrls.length*100)+'%)');
 
     cpData = { domain, urls: contentUrls, clusters: allClusters, gaps: allGaps, orphans: allOrphans, newTopics: allNewTopics, lang, date: new Date().toLocaleDateString('vi-VN') };
     localStorage.setItem('genseo_cp', JSON.stringify(cpData));
