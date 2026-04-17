@@ -377,7 +377,7 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
 /* ── CONTENT PLAN ── */
 .cp-page{padding:0}
 .cp-toolbar{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
-.cp-input{flex:1;min-width:280px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:12.5px;padding:9px 14px;outline:none;transition:border-color .15s}
+.cp-input{flex:1;min-width:280px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:inherit;font-size:12.5px;padding:9px 14px;outline:none;transition:border-color .15s;width:100%;box-sizing:border-box}
 .cp-input:focus{border-color:var(--green)}
 .cp-input::placeholder{color:var(--text3)}
 .cp-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
@@ -2925,16 +2925,25 @@ function renderContentPlanPage(){
           <div style="font-size:12px;color:var(--text3);margin-top:2px">Phân tích sitemap → Pillar-Cluster architecture → Content gaps → Đề xuất bài viết mới</div>
         </div>
       </div>
-      <div class="cp-toolbar" style="border-top:none">
-        <input class="cp-input" id="cpSitemapUrl" placeholder="Nhập URL sitemap (https://domain.com/sitemap.xml) HOẶC paste danh sách URLs — mỗi dòng 1 URL">
-        <select class="seo-site-select" id="cpLang" style="width:auto">
-          <option value="en">🇺🇸 English</option>
-          <option value="vi">🇻🇳 Tiếng Việt</option>
-        </select>
-        <button class="btn-green" onclick="runContentPlan()" id="cpRunBtn">
-          🔍 Phân tích
-        </button>
-        ${cpData ? '<button class="btn-outline" onclick="clearCPData()" style="font-size:11px">🗑 Xóa kết quả</button>' : ''}
+      <div class="cp-toolbar" style="border-top:none;align-items:flex-start">
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:11px;color:var(--text3)">URL sitemap hoặc paste danh sách URLs:</span>
+            <button onclick="toggleCPInput()" id="cpToggleBtn" class="btn-outline" style="font-size:10px;padding:2px 7px">⤢ Mở rộng</button>
+          </div>
+          <textarea class="cp-input" id="cpSitemapUrl" rows="2" style="resize:vertical;min-height:38px;max-height:200px;font-family:monospace;font-size:12px;line-height:1.5"
+            placeholder="Nhập URL sitemap: https://domain.com/sitemap.xml&#10;HOẶC paste toàn bộ nội dung trang sitemap (Ctrl+A → Ctrl+C từ browser)&#10;HOẶC paste danh sách URLs — mỗi dòng 1 URL"></textarea>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
+          <select class="seo-site-select" id="cpLang" style="width:auto">
+            <option value="en">🇺🇸 English</option>
+            <option value="vi">🇻🇳 Tiếng Việt</option>
+          </select>
+          <div style="display:flex;gap:6px">
+            <button class="btn-green" onclick="runContentPlan()" id="cpRunBtn">🔍 Phân tích</button>
+            ${cpData ? '<button class="btn-outline" onclick="clearCPData()" style="font-size:11px">🗑 Xóa</button>' : ''}
+          </div>
+        </div>
       </div>
       <div id="cpBody">
         ${cpData ? renderCPResults() : renderCPIntro()}
@@ -2972,6 +2981,21 @@ function renderCPIntro(){
 }
 
 function clearCPData(){ cpData = null; cpLogs = []; localStorage.removeItem('genseo_cp'); renderContentPlanPage(); }
+
+function toggleCPInput(){
+  const ta = document.getElementById('cpSitemapUrl');
+  const btn = document.getElementById('cpToggleBtn');
+  if(!ta||!btn) return;
+  if(ta.rows === 2){
+    ta.rows = 8;
+    ta.style.maxHeight = '300px';
+    btn.textContent = '⤡ Thu nhỏ';
+  } else {
+    ta.rows = 2;
+    ta.style.maxHeight = '200px';
+    btn.textContent = '⤢ Mở rộng';
+  }
+}
 
 async function runContentPlan(){
   if(cpRunning) return;
@@ -3012,31 +3036,38 @@ async function runContentPlan(){
     if(input.startsWith('http') && !input.includes('\n')){
       urls = await fetchSitemapUrls(input, addLog);
     } else {
-      // Smart paste parser — handles XML, plain URLs, or WP sitemap table (mixed text)
-      const lines = input.split('\n').map(l=>l.trim()).filter(Boolean);
+      // Smart paste parser — handles XML, plain URLs, WP sitemap table (mixed text)
       const extracted = new Set();
 
-      // Method 1: extract from <loc> tags (XML)
+      // Method 1: <loc> tags từ XML
       const locMatches = [...input.matchAll(/<loc>\s*(https?[^<]+?)\s*<\/loc>/g)];
       locMatches.forEach(m => extracted.add(m[1].trim()));
 
-      // Method 2: extract all http URLs from any text (handles WP table, mixed content)
-      const urlMatches = [...input.matchAll(/https?:\/\/[^\s<>"'\t]+/g)];
-      urlMatches.forEach(m => {
-        const u = m[0].replace(/[.,;)]+$/, ''); // strip trailing punctuation
-        if(u.startsWith('http')) extracted.add(u);
-      });
+      if(extracted.size === 0){
+        // Method 2: Split theo boundary "https://" — mỗi segment lấy token đầu tiên
+        // Xử lý cả trường hợp WP table: "https://domain/slug/ 5 2026-04-13 04:42 https://..."
+        const segments = input.split(/(?=https?:\/\/)/);
+        segments.forEach(seg => {
+          if(!seg.startsWith('http')) return;
+          // Lấy phần URL: kết thúc tại space, tab, <, >, quote
+          const urlMatch = seg.match(/^(https?:\/\/[^\s<>"'\t\n\r]+)/);
+          if(urlMatch){
+            let u = urlMatch[1].replace(/[.,;)>]+$/, '').trim();
+            // Bỏ số và ngày dính vào cuối URL: /slug/5 hoặc /slug/2024-01-05
+            u = u.replace(/\/\d+(\.|$)/, '/').replace(/\/\d{4}-\d{2}-\d{2}.*$/, '/');
+            if(u.startsWith('http')) extracted.add(u);
+          }
+        });
+      }
 
       urls = [...extracted].filter(u => {
-        // Filter out dates, numbers, irrelevant URLs
         try { new URL(u); } catch(e){ return false; }
-        // Skip admin, wp-content, media files, dates that got parsed as URLs
         return !/\.(jpg|jpeg|png|gif|pdf|mp4|svg|ico|css|js)(\?|$)/i.test(u)
-            && !/\/wp-(admin|content|includes)\//i.test(u)
-            && !/\/feed\//i.test(u);
+            && !/\/(wp-admin|wp-content|wp-includes|feed)\//i.test(u)
+            && u.includes('.');
       });
 
-      addLog('✓ Đọc '+urls.length+' URLs từ paste (smart parse)');
+      addLog('✓ Smart parse: '+urls.length+' URLs (từ '+extracted.size+' raw matches)');
     }
 
     if(!urls.length) throw new Error('Không tìm thấy URL nào. Kiểm tra lại sitemap URL.');
