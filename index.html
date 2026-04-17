@@ -3035,7 +3035,8 @@ async function runContentPlan(){
 
     // ── STEP 4: AI batch analysis ──
     const domain = input.match(/^https?:\/\/([^\/]+)/)?.[1] || 'website';
-    const BATCH = 80; // send up to 80 URLs per call
+    // Batch 25 URLs — đủ context cho AI, không quá dài → nhanh hơn
+    const BATCH = 25;
     const batches = [];
     for(let i=0; i<pages.length; i+=BATCH) batches.push(pages.slice(i,i+BATCH));
 
@@ -3044,60 +3045,59 @@ async function runContentPlan(){
     let allOrphans = [];
     let allNewTopics = [];
 
-    for(let bi=0; bi<batches.length; bi++){
-      const batch = batches[bi];
-      setProgress(30 + (bi/batches.length)*50, 'AI phân tích batch '+(bi+1)+'/'+batches.length+'...');
-      addLog('→ Batch '+(bi+1)+'/'+batches.length+': phân tích '+batch.length+' trang');
+    // Chạy 2 batch song song để tiết kiệm thời gian
+    for(let bi=0; bi<batches.length; bi+=2){
+      const batchGroup = batches.slice(bi, bi+2);
+      setProgress(30 + (bi/batches.length)*55, 'AI phân tích batch '+(bi+1)+'–'+(Math.min(bi+2,batches.length))+'/'+batches.length+'...');
 
-      const urlList = batch.map((p,i)=>(i+1)+'. '+p.url).join('\n');
+      const batchPromises = batchGroup.map(async (batch, bIdx) => {
+        const realBi = bi + bIdx;
+        addLog('→ Batch '+(realBi+1)+'/'+batches.length+': '+batch.length+' trang');
 
-      const prompt = 'You are an expert SEO content strategist. Analyze these URLs from a website and create a content plan.\n\n'
-        +'WEBSITE: '+domain+'\n'
-        +'OUTPUT LANGUAGE: '+lang+'\n\n'
-        +'URLs to analyze:\n'+urlList+'\n\n'
-        +'TASK: Group these URLs into topic clusters using pillar-cluster architecture.\n\n'
-        +'Rules:\n'
-        +'- Each cluster needs 1 PILLAR (broad topic page) and 1+ CLUSTERs (specific sub-topics)\n'
-        +'- Identify ORPHAN pages that don\'t fit any cluster\n'
-        +'- Identify CONTENT GAPS: missing articles each cluster needs\n'
-        +'- Suggest NEW TOPICS to expand the site\'s topical authority\n'
-        +'- All suggested articles must be SEO+GEO optimized (E-E-A-T signals, search intent matched, schema-ready)\n\n'
-        +'Return ONLY compact JSON:\n'
-        +'{\n'
-        +'"clusters":[\n'
-        +'  {"topic":"Topic Name","pillar_url":"url","pillar_title":"title","clusters":[{"url":"url","title":"inferred title","role":"cluster"}],"tags":["tag1","tag2"],"health":"strong|thin|critical"}\n'
-        +'],\n'
-        +'"gaps":[\n'
-        +'  {"topic":"Topic Name","type":"missing cost guide","title":"Suggested Title","keyword":"target keyword","slug":"/blog/slug/","wordcount":1500,"priority":"high|medium|low","intent":"commercial|informational|navigational","schema":"Article|FAQPage|HowTo","geo_signal":"Include Calgary/location for local SEO"}\n'
-        +'],\n'
-        +'"orphans":["url1","url2"],\n'
-        +'"new_topics":[\n'
-        +'  {"topic":"New Topic","rationale":"why this topic","articles":[{"title":"Article Title","keyword":"kw","slug":"/blog/slug/","priority":"high|medium"}]}\n'
-        +']\n'
-        +'}';
+        // Chỉ dùng slug (không full URL) → giảm tokens ~70%
+        const slugList = batch.map((p,i)=>{
+          const slug = p.url.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/, '') || '/';
+          return (i+1)+'. '+slug;
+        }).join('\n');
 
-      try {
-        let txt = '';
+        const prompt = 'SEO strategist. Analyze slugs from site: '+domain+'\n'
+          +'Language: '+lang+'. Base: https://'+domain+'\n\n'
+          +'Slugs:\n'+slugList+'\n\n'
+          +'Return ONLY compact JSON (no markdown, no explanation):\n'
+          +'{"clusters":[{"topic":"T","pillar_url":"full-url","pillar_title":"Title",'
+          +'"clusters":[{"url":"full-url","title":"T"}],"tags":["t"],"health":"strong|thin|critical"}],'
+          +'"gaps":[{"topic":"T","type":"g","title":"T","keyword":"k","slug":"/s/","wordcount":1200,"priority":"high|medium|low","intent":"informational|commercial","schema":"Article|FAQPage|HowTo"}],'
+          +'"orphans":["slug"],"new_topics":[{"topic":"T","rationale":"r","articles":[{"title":"T","keyword":"k","slug":"/s/","priority":"high"}]}]}';
+
         try {
-          txt = await callAIUniversal([{role:'user',content:prompt}], 4000);
-          addLog('✓ AI response via '+(getPrimaryProvider()===_lastProviderFailed?'fallback':'primary')+' provider');
-        } catch(aiErr){
-          addLog('⚠ AI error: '+aiErr.message);
-          throw aiErr;
+          const timeoutP = new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 45s')),45000));
+          const txt = await Promise.race([callAIUniversal([{role:'user',content:prompt}], 3000), timeoutP]);
+          const clean = txt.replace(/```json|```/g,'').trim();
+          const jsonM = clean.match(/\{[\s\S]*\}/);
+          if(jsonM){
+            const p = JSON.parse(jsonM[0]);
+            addLog('✓ Batch '+(realBi+1)+': '+(p.clusters||[]).length+' clusters, '+(p.gaps||[]).length+' gaps');
+            return p;
+          }
+          addLog('⚠ Batch '+(realBi+1)+': không parse được JSON');
+          return null;
+        } catch(err){
+          addLog('⚠ Batch '+(realBi+1)+' lỗi: '+err.message.substring(0,60));
+          return null;
         }
-        txt = txt.replace(/```json|```/g,'').trim();
-        const jsonM = txt.match(/\{[\s\S]*\}/);
-        if(jsonM){
-          const parsed = JSON.parse(jsonM[0]);
-          allClusters.push(...(parsed.clusters||[]));
-          allGaps.push(...(parsed.gaps||[]));
-          allOrphans.push(...(parsed.orphans||[]));
-          allNewTopics.push(...(parsed.new_topics||[]));
-          addLog('✓ Batch '+(bi+1)+': '+( parsed.clusters||[]).length+' clusters, '+(parsed.gaps||[]).length+' gaps');
-        }
-      } catch(err){ addLog('⚠ Batch '+(bi+1)+' lỗi: '+err.message); }
+      });
 
-      if(bi < batches.length-1) await new Promise(r=>setTimeout(r,1500));
+      const results = await Promise.allSettled(batchPromises);
+      results.forEach(res => {
+        if(res.status==='fulfilled' && res.value){
+          allClusters.push(...(res.value.clusters||[]));
+          allGaps.push(...(res.value.gaps||[]));
+          allOrphans.push(...(res.value.orphans||[]));
+          allNewTopics.push(...(res.value.new_topics||[]));
+        }
+      });
+
+      if(bi+2 < batches.length) await new Promise(r=>setTimeout(r,800));
     }
 
     setProgress(85, 'Đang tổng hợp kết quả...');
