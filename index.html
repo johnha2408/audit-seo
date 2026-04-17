@@ -560,6 +560,11 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
       </select>
       <div class="form-hint" id="modelHint" style="color:var(--green)">✓ DeepSeek — nhanh, rẻ, không bị CORS.</div>
     </div>
+    <div class="form-grp" style="margin-top:14px">
+      <label class="form-lbl">Cloudflare Worker URL <span style="font-size:10px;color:var(--text3)">(tùy chọn — dùng để fetch sitemap nhanh hơn)</span></label>
+      <input class="form-inp" id="workerUrlInput" type="text" placeholder="https://claude-proxy.yourname.workers.dev">
+      <div class="form-hint" style="color:var(--text3)">Nếu có Worker, sitemap sẽ được fetch qua Worker thay vì CORS proxy công cộng → nhanh hơn và ít bị 403 hơn. <button onclick="downloadWorkerCode()" style="background:none;border:none;color:var(--green);cursor:pointer;font-size:11px;padding:0;font-family:inherit">📋 Tải Worker code mới</button></div>
+    </div>
     <div class="m-footer">
       <button class="btn-cancel" onclick="closeSettings()">Hủy</button>
       <button class="btn-submit" onclick="saveApiKey()">💾 Lưu cài đặt</button>
@@ -3267,14 +3272,17 @@ async function fetchSitemapUrls(url, addLog){
     .map(m=>m[1].trim()).filter(u=>/^https?:\/\//.test(u));
 
   // Strategy 1: Dùng Cloudflare Worker nếu đã cài (nhanh nhất, không bị CORS)
-  const workerUrl = getClaudeProxyUrl(); // reuse worker URL field
+  const workerUrl = getClaudeProxyUrl();
   async function fetchViaWorker(targetUrl){
-    if(!workerUrl) throw new Error('No worker');
-    // Worker cần hỗ trợ endpoint /fetch?url=... — dùng worker đã có
-    const r = await fetch(workerUrl.replace(/\/claude$/, '')+'/fetch?url='+encodeURIComponent(targetUrl),
-      {signal: AbortSignal.timeout(5000)});
-    if(!r.ok) throw new Error('Worker '+r.status);
-    return r.text();
+    if(!workerUrl) throw new Error('No worker configured');
+    // Worker hỗ trợ GET /fetch?url=...
+    const base = workerUrl.replace(/\/(claude|fetch)\/?$/, '');
+    const r = await fetch(base+'/fetch?url='+encodeURIComponent(targetUrl),
+      {signal: AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error('Worker HTTP '+r.status);
+    const txt = await r.text();
+    if(!txt.includes('<loc>') && !txt.includes('<urlset') && !txt.includes('<sitemapindex')) throw new Error('Worker response not XML');
+    return txt;
   }
 
   // Strategy 2: Race 3 proxy cùng lúc — lấy cái nào nhanh nhất
@@ -3810,7 +3818,7 @@ updateILCount();
 // ── SETTINGS ──
 function getClaudeKey(){ return ''; } // deprecated
 function getClaudeModel(){ return 'claude-sonnet-4-6'; } // deprecated
-function getClaudeProxyUrl(){ return ''; } // deprecated
+function getClaudeProxyUrl(){ return localStorage.getItem('genseo_worker_url') || ''; }
 function getPrimaryProvider(){ return 'openrouter'; }
 function getFallbackProvider(){ return 'none'; }
 function getFallbackORKey(){ return getApiKey(); }
@@ -3821,6 +3829,8 @@ function openSettings(){
   document.getElementById('apiKeyInput').value = getApiKey();
   const sel = document.getElementById('aiModelSelect');
   if(sel){ sel.value = getAIModel(); updateModelHint(sel.value); }
+  const wu = document.getElementById('workerUrlInput');
+  if(wu) wu.value = getClaudeProxyUrl();
   document.getElementById('settingsModal').classList.add('show');
 }
 function closeSettings(){ document.getElementById('settingsModal').classList.remove('show'); }
@@ -3841,8 +3851,76 @@ function saveApiKey(){
   localStorage.setItem('genseo_api_key', k);
   const model = document.getElementById('aiModelSelect')?.value;
   if(model) localStorage.setItem('genseo_ai_model', model);
+  const wu = document.getElementById('workerUrlInput')?.value.trim();
+  if(wu) localStorage.setItem('genseo_worker_url', wu);
   closeSettings();
   toast('Đã lưu cài đặt ✓','ok');
+}
+
+function downloadWorkerCode(){
+  const code = `// Cloudflare Worker — CORS proxy cho Anthropic API + Sitemap fetcher
+// Deploy tại: workers.cloudflare.com → Create Worker → Paste → Deploy
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders() });
+    }
+
+    // ── /fetch?url=... — Sitemap/URL proxy ──
+    if (url.pathname === '/fetch' || url.searchParams.has('url')) {
+      const targetUrl = url.searchParams.get('url');
+      if (!targetUrl) return new Response('Missing url param', { status: 400 });
+      try {
+        const resp = await fetch(targetUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEOBot/1.0)' }
+        });
+        const body = await resp.text();
+        return new Response(body, {
+          status: resp.status,
+          headers: { ...corsHeaders(), 'Content-Type': resp.headers.get('Content-Type') || 'text/xml' }
+        });
+      } catch(e) {
+        return new Response('Fetch failed: ' + e.message, { status: 502, headers: corsHeaders() });
+      }
+    }
+
+    // ── POST / — Claude API proxy ──
+    if (request.method === 'POST') {
+      const body = await request.json();
+      const { apiKey, model, max_tokens, messages } = body;
+      if (!apiKey) return new Response(JSON.stringify({ error: { message: 'Missing apiKey' } }), { status: 400, headers: corsHeaders() });
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model, max_tokens, messages }),
+      });
+      const data = await resp.json();
+      return new Response(JSON.stringify(data), { status: resp.status, headers: corsHeaders() });
+    }
+
+    return new Response('OK', { headers: corsHeaders() });
+  }
+};
+
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json'
+  };
+}`;
+  const blob = new Blob([code], {type:'text/javascript'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'claude-worker.js';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('✓ Đã tải claude-worker.js — Deploy lên Cloudflare Workers','ok');
 }
 // ── UNIVERSAL AI CALL (OpenRouter only, simple) ──
 let _lastProviderFailed = null;
