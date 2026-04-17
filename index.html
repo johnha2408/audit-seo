@@ -2926,7 +2926,7 @@ function renderContentPlanPage(){
         </div>
       </div>
       <div class="cp-toolbar" style="border-top:none">
-        <input class="cp-input" id="cpSitemapUrl" placeholder="Nhập URL sitemap: https://domain.com/sitemap.xml (hoặc dán danh sách URL)">
+        <input class="cp-input" id="cpSitemapUrl" placeholder="Nhập URL sitemap (https://domain.com/sitemap.xml) HOẶC paste danh sách URLs — mỗi dòng 1 URL">
         <select class="seo-site-select" id="cpLang" style="width:auto">
           <option value="en">🇺🇸 English</option>
           <option value="vi">🇻🇳 Tiếng Việt</option>
@@ -3011,8 +3011,13 @@ async function runContentPlan(){
 
     if(input.startsWith('http')){
       urls = await fetchSitemapUrls(input, addLog);
+    } else if(input.includes('<loc>') || input.includes('<?xml')){
+      // Pasted XML sitemap content — extract <loc> tags
+      const locMatches = [...input.matchAll(/<loc>\s*(.*?)\s*<\/loc>/g)].map(m=>m[1].trim()).filter(u=>u.startsWith('http'));
+      urls = locMatches;
+      addLog('✓ Đọc '+urls.length+' URLs từ XML paste');
     } else {
-      // Paste list of URLs
+      // Plain URL list — one per line
       urls = input.split('\n').map(l=>l.trim()).filter(l=>l.startsWith('http'));
       addLog('✓ Đọc '+urls.length+' URLs từ danh sách');
     }
@@ -3261,7 +3266,20 @@ async function runContentPlan(){
       : '<div style="padding:20px;color:var(--text3);font-size:12px">AI không phân tích được cluster nào. Kiểm tra log ở trên xem lỗi gì.</div>';
 
   } catch(e){
-    document.getElementById('cpBody').innerHTML = '<div style="padding:20px 24px"><div style="background:#7f1d1d22;border:1px solid #f8717133;border-radius:8px;padding:14px;font-size:13px;color:#f87171">✗ '+e.message+'</div></div>';
+    document.getElementById('cpBody').innerHTML = '<div style="padding:20px 24px">'
+      +'<div style="background:#7f1d1d22;border:1px solid #f8717133;border-radius:8px;padding:14px;font-size:13px;color:#f87171">'
+      +'<div style="font-weight:600;margin-bottom:8px">✗ Lỗi:</div>'
+      +e.message.replace(/\n/g,'<br>')
+      +'</div>'
+      +'<div style="margin-top:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12.5px">'
+      +'<div style="font-weight:600;color:var(--text2);margin-bottom:8px">💡 Cách paste URL thủ công:</div>'
+      +'<ol style="color:var(--text3);line-height:2;padding-left:16px;margin:0">'
+      +'<li>Mở sitemap trong browser: <code style="background:var(--surface2);padding:1px 5px;border-radius:3px">https://omega2000.ca/post-sitemap.xml</code></li>'
+      +'<li>Ctrl+A để chọn hết → Ctrl+C để copy</li>'
+      +'<li>Paste vào ô nhập URL ở trên (tool tự extract URLs từ XML)</li>'
+      +'</ol>'
+      +'</div>'
+      +'</div>';
     addLog('✗ Lỗi: '+e.message);
   }
   cpRunning = false;
@@ -3319,7 +3337,7 @@ async function fetchSitemapUrls(url, addLog){
     try {
       return await Promise.any(racePromises);
     } catch(e){
-      throw new Error('Tất cả proxy đều fail. Hãy paste danh sách URLs trực tiếp vào ô nhập.');
+      throw new Error('Không thể fetch sitemap — server có thể đang block bot (403). \n\nGiải pháp: Mở sitemap.xml trong browser → Ctrl+A → Ctrl+C → paste vào ô nhập.');
     }
   }
 
