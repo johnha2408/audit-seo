@@ -476,7 +476,7 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
       <div class="t-tab" onclick="showView('plans')">Tổng quan</div>
       <div class="t-tab" id="tab-content-plan" onclick="showView('cp')">Content Plan <span class="t-cnt" id="tb-cp-cnt">0</span></div>
       <div class="t-tab active" id="tab-kwplan" onclick="showView('plans')">Keyword Plan <span class="t-cnt g" id="tb-plan-cnt">0</span></div>
-      <div class="t-tab" id="tab-articles">Bài viết <span class="t-cnt" id="tb-art-cnt">0</span></div>
+      <div class="t-tab" id="tab-articles" onclick="showView('articles')">Bài viết <span class="t-cnt" id="tb-queue-cnt">0</span></div>
       <div class="t-tab" id="tab-il" onclick="showView('il')">Liên kết nội bộ <span class="t-cnt" id="tb-il-cnt">0</span></div>
       <div class="t-tab">Knowledge Base</div>
       <div class="t-tab" id="tab-seo-opt" onclick="showView('seo')">SEO Optimizer</div>
@@ -1226,6 +1226,9 @@ function showView(view){
   } else if(view==='cp'){
     document.getElementById('tab-content-plan').classList.add('active');
     renderContentPlanPage();
+  } else if(view==='articles'){
+    document.getElementById('tab-articles').classList.add('active');
+    renderArticleQueuePage();
   }
 }
 
@@ -3341,7 +3344,7 @@ function showCPTab(tabId){
   const el = document.getElementById('cpTabContent');
   if(!el) return;
   if(tabId==='cp-arch') el.innerHTML = renderCPArchTab(clusters, gapsByTopic, healthIcon, healthColor);
-  else if(tabId==='cp-gaps') el.innerHTML = renderCPGapsTab(gaps, priorityColor);
+  else if(tabId==='cp-gaps') el.innerHTML = renderCPGapsTab(gaps);
   else if(tabId==='cp-newtopics') el.innerHTML = renderCPNewTopicsTab(newTopics||[]);
   else if(tabId==='cp-orphans') el.innerHTML = renderCPOrphansTab(cpData.orphans);
 }
@@ -3421,91 +3424,78 @@ function renderCPArchTab(clusters, gapsByTopic, healthIcon, healthColor){
     +'</div>';
 }
 
-function renderCPGapsTab(gaps, priorityColor){
+function renderGapTable(rows, isCompetitor){
+  if(!rows.length) return '';
+  const queue = getArticleQueue();
+  const queueSlugs = new Set(queue.map(q=>q.slug));
+  return rows.map((g,i)=>{
+    const inQueue = queueSlugs.has(g.slug||g.title);
+    const safeG = JSON.stringify(g).replace(/"/g,'&quot;');
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 10px;color:var(--text3);font-size:11px;font-family:monospace;white-space:nowrap">${i+1}</td>
+      <td style="padding:9px 10px">
+        <div style="font-size:13px;font-weight:500;color:var(--text)">${g.title||'Untitled'}</div>
+      </td>
+      <td style="padding:9px 10px;font-size:11px;color:var(--text3);font-family:monospace">${g.slug||'—'}</td>
+      <td style="padding:9px 10px">
+        <span style="font-size:11px;background:var(--surface2);border-radius:4px;padding:2px 7px;color:var(--text2)">${g.topic||'—'}</span>
+      </td>
+      <td style="padding:9px 10px;text-align:right">
+        <button onclick="addToQueue(${safeG})" style="background:${inQueue?'var(--gdim)':'var(--green)'};color:${inQueue?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">
+          ${inQueue?'✓ Đã thêm':'+ Thêm'}
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCPGapsTab(gaps){
   if(!gaps.length) return '<div style="padding:24px;color:var(--green);font-size:12px">✅ Không phát hiện content gap!</div>';
   const sorted = [...gaps].sort((a,b)=>({high:0,medium:1,low:2}[a.priority]||1)-({high:0,medium:1,low:2}[b.priority]||1));
   const competitorGaps = cpData?._competitorGaps || [];
+  const allRows = [...sorted, ...competitorGaps];
+
   return '<div style="padding:16px">'
-    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
-    +'<span style="font-size:12px;color:var(--text3)">'+gaps.length+' gaps từ phân tích AI</span>'
-    +'<button class="btn-outline" id="compGapBtn" onclick="searchCompetitorGaps()" style="font-size:11px;display:flex;align-items:center;gap:5px">'
-    +'🔍 Tìm gaps từ đối thủ (web search)</button>'
-    +(competitorGaps.length?'<span style="font-size:11px;color:var(--green)">+ '+competitorGaps.length+' competitor gaps</span>':'')
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+    +'<span style="font-size:12px;color:var(--text3)">'+allRows.length+' content gaps</span>'
+    +'<button class="btn-outline" id="compGapBtn" onclick="searchCompetitorGaps()" style="font-size:11px">🔍 Tìm gaps từ đối thủ</button>'
+    +(competitorGaps.length?'<span style="font-size:11px;color:#60a5fa">+ '+competitorGaps.length+' competitor gaps</span>':'')
+    +"<button class=\"btn-outline\" onclick=\"showView('articles')\" style=\"font-size:11px;margin-left:auto\">📋 Xem danh sách bài ("+getArticleQueue().length+")</button>"
     +'</div>'
-    +sorted.map(g=>`
-      <div class="cp-gap-item cp-gap-${g.priority||'medium'}">
-        <div style="min-width:80px;text-align:center">
-          <div style="font-size:18px">${g.priority==='high'?'🔴':g.priority==='low'?'🟢':'🟡'}</div>
-          <div style="font-size:9px;font-weight:700;color:${priorityColor(g.priority||'medium')};text-transform:uppercase">${g.priority||'medium'}</div>
-        </div>
-        <div style="flex:1">
-          <div class="cp-gap-title">${g.title||'Untitled'}</div>
-          <div class="cp-gap-kw">🔑 ${g.keyword||'—'}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px;display:flex;gap:12px;flex-wrap:wrap">
-            <span>📁 Topic: <strong style="color:var(--text2)">${g.topic||'—'}</strong></span>
-            <span>📄 Type: ${g.type||'—'}</span>
-            <span>📏 ${g.wordcount||1200}w</span>
-            <span>🎯 ${g.intent||'informational'}</span>
-            ${g.schema?`<span>🏷 Schema: ${g.schema}</span>`:''}
-          </div>
-          ${g.slug?`<div style="font-size:10.5px;color:var(--text3);margin-top:4px;font-family:'JetBrains Mono',monospace">🔗 ${g.slug}</div>`:''}
-          ${g.geo_signal?`<div style="font-size:10.5px;color:#60a5fa;margin-top:3px">🌍 GEO: ${g.geo_signal}</div>`:''}
-        </div>
-        <button class="btn-outline" style="font-size:10.5px;white-space:nowrap;align-self:flex-start"
-          onclick="createFromGap(${JSON.stringify(g).replace(/"/g,'&quot;')})">
-          + Tạo bài
-        </button>
-      </div>`).join('')
-    // Competitor gaps section
-    +(competitorGaps.length ? 
-      '<div style="margin-top:20px;border-top:2px solid #60a5fa33;padding-top:14px">'
-      +'<div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:12px">🔍 Gaps từ đối thủ (web research)</div>'
-      +competitorGaps.map(g=>`
-        <div class="cp-gap-item cp-gap-${g.priority||'medium'}" style="border-color:#60a5fa33">
-          <div style="min-width:80px;text-align:center">
-            <div style="font-size:18px">${g.priority==='high'?'🔴':g.priority==='low'?'🟢':'🟡'}</div>
-            <div style="font-size:9px;font-weight:700;color:#60a5fa;text-transform:uppercase">COMPETITOR</div>
-          </div>
-          <div style="flex:1">
-            <div style="font-size:12.5px;font-weight:600">${g.title}</div>
-            <div style="font-size:10.5px;color:var(--text3);font-family:monospace;margin-top:3px">🔑 ${g.keyword||''}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap">
-              <span>📁 ${g.topic||''}</span>
-              ${g.competitor?`<span>🌐 Competitor: <strong style="color:#60a5fa">${g.competitor}</strong></span>`:''}
-              ${g.slug?`<span style="font-family:monospace">🔗 ${g.slug}</span>`:''}
-            </div>
-          </div>
-          <button class="btn-outline" style="font-size:10.5px;white-space:nowrap;align-self:flex-start"
-            onclick="createFromGap(${JSON.stringify(g).replace(/"/g,'&quot;')})">+ Tạo bài</button>
-        </div>`).join('')
-      +'</div>'
-    : '<div id="compGapResult"></div>')
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="border-bottom:2px solid var(--border)">'
+    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500;width:36px">#</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Title</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">URL</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Topic</th>'
+    +'<th style="padding:8px 10px;width:90px"></th>'
+    +'</tr></thead>'
+    +'<tbody id="gapTableBody">'+renderGapTable(allRows, false)+'</tbody>'
+    +'</table>'
     +'</div>';
 }
 
 function renderCPNewTopicsTab(newTopics){
   if(!newTopics.length) return '<div style="padding:24px;color:var(--text3);font-size:12px">Chưa có dữ liệu topic mở rộng</div>';
+  // Flatten all articles from all topics into rows
+  const rows = [];
+  newTopics.forEach(t => (t.articles||[]).forEach(a => rows.push({...a, topic: t.topic, source:'new_topic'})));
+
   return '<div style="padding:16px">'
-    +'<div style="font-size:12px;color:var(--text3);margin-bottom:14px">'+newTopics.length+' topic mới nên phát triển để mở rộng topical authority</div>'
-    +newTopics.map(t=>`
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-size:16px">💡</span>
-          <div style="font-size:13px;font-weight:600">${t.topic}</div>
-        </div>
-        <div style="font-size:11.5px;color:var(--text3);margin-bottom:10px">${t.rationale||''}</div>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          ${(t.articles||[]).map(a=>`
-            <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:6px;padding:8px 12px">
-              <span style="font-size:10px;background:${a.priority==='high'?'#7f1d1d22':'#78350f22'};color:${a.priority==='high'?'#f87171':'#f59e0b'};border:1px solid ${a.priority==='high'?'#f8717133':'#f59e0b33'};border-radius:4px;padding:2px 5px;font-weight:700">${(a.priority||'medium').toUpperCase()}</span>
-              <div style="flex:1">
-                <div style="font-size:12.5px;font-weight:500">${a.title||'Untitled'}</div>
-                <div style="font-size:10.5px;color:var(--text3);font-family:'JetBrains Mono',monospace">${a.slug||''}</div>
-              </div>
-              <div style="font-size:10.5px;color:var(--text3)">${a.keyword||''}</div>
-            </div>`).join('')}
-        </div>
-      </div>`).join('')
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+    +'<span style="font-size:12px;color:var(--text3)">'+rows.length+' bài viết mới nên phát triển</span>'
+    +"<button class=\"btn-outline\" onclick=\"showView('articles')\" style=\"font-size:11px;margin-left:auto\">📋 Xem danh sách bài ("+getArticleQueue().length+")</button>"
+    +'</div>'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="border-bottom:2px solid var(--border)">'
+    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500;width:36px">#</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Title</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">URL</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Topic</th>'
+    +'<th style="padding:8px 10px;width:90px"></th>'
+    +'</tr></thead>'
+    +'<tbody>'+renderGapTable(rows, false)+'</tbody>'
+    +'</table>'
     +'</div>';
 }
 
@@ -3581,14 +3571,104 @@ async function searchCompetitorGaps(){
   if(btn){ btn.disabled=false; btn.innerHTML='🔍 Tìm gaps từ đối thủ (web search)'; }
 }
 
+// ── ARTICLE QUEUE ──
+function getArticleQueue(){ return JSON.parse(localStorage.getItem('genseo_article_queue')||'[]'); }
+function saveArticleQueue(q){ localStorage.setItem('genseo_article_queue', JSON.stringify(q)); updateQueueCount(); }
+function updateQueueCount(){
+  const cnt = document.getElementById('tb-queue-cnt');
+  if(cnt) cnt.textContent = getArticleQueue().length;
+}
+function addToQueue(gap){
+  const q = getArticleQueue();
+  const key = gap.slug||gap.title;
+  if(q.find(x=>(x.slug||x.title)===key)){ toast('Bài này đã có trong danh sách','err'); return; }
+  q.push({ title: gap.title||'', slug: gap.slug||'', topic: gap.topic||gap.topic||'', keyword: gap.keyword||'', source: gap.competitor?'competitor':'ai', addedAt: new Date().toLocaleDateString('vi-VN') });
+  saveArticleQueue(q);
+  toast('✓ Đã thêm vào danh sách bài viết','ok');
+  // Refresh gap table button states
+  const tab = document.getElementById('cp-gaps-btn');
+  if(tab && tab.classList.contains('active')) showCPTab('cp-gaps');
+  else { const tab2 = document.getElementById('cp-newtopics-btn'); if(tab2 && tab2.classList.contains('active')) showCPTab('cp-newtopics'); }
+}
+function removeFromQueue(idx){
+  const q = getArticleQueue();
+  q.splice(idx, 1);
+  saveArticleQueue(q);
+  renderArticleQueuePage();
+}
+
+function renderArticleQueuePage(){
+  updateQueueCount();
+  const q = getArticleQueue();
+  const c = document.getElementById('content');
+  c.innerHTML = '<div style="padding:20px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
+    +'<div><div style="font-size:17px;font-weight:700">Danh sách bài viết</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-top:2px">Các bài cần viết từ Content Plan · Copy sang Google Sheet để lên lịch</div></div>'
+    +'<div style="display:flex;gap:8px">'
+    +(q.length?'<button class="btn-outline" onclick="copyQueueToClipboard()" style="font-size:12px">📋 Copy sang Google Sheet</button>':'')
+    +(q.length?'<button class="btn-outline" onclick="clearQueue()" style="font-size:11px;color:#f87171">🗑 Xóa tất cả</button>':'')
+    +'<button class="btn-green" onclick="showView(\'cp\')" style="font-size:12px">← Content Plan</button>'
+    +'</div></div>'
+    +(q.length===0
+      ? '<div style="text-align:center;padding:40px;color:var(--text3)">'
+        +'<div style="font-size:32px;margin-bottom:10px">📋</div>'
+        +'<div style="font-size:14px">Chưa có bài nào. Vào Content Plan → Content Gaps hoặc New Topics → bấm <strong>+ Thêm</strong></div>'
+        +'</div>'
+      : '<table style="width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden" id="queueTable">'
+        +'<thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">'
+        +'<th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--text3);font-weight:500;width:40px">#</th>'
+        +'<th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Title</th>'
+        +'<th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">URL</th>'
+        +'<th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Tag / Topic</th>'
+        +'<th style="padding:10px 12px;width:40px"></th>'
+        +'</tr></thead>'
+        +'<tbody>'
+        +q.map((item,i)=>`
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px 12px;font-size:11px;color:var(--text3);font-family:monospace">${i+1}</td>
+            <td style="padding:10px 12px">
+              <div style="font-size:13px;font-weight:500;color:var(--text)">${item.title}</div>
+              ${item.keyword?`<div style="font-size:10.5px;color:var(--text3);margin-top:2px">🔑 ${item.keyword}</div>`:''}
+            </td>
+            <td style="padding:10px 12px;font-size:11px;color:var(--text3);font-family:monospace">${item.slug||'—'}</td>
+            <td style="padding:10px 12px">
+              <span style="font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;color:var(--text2)">${item.topic||'—'}</span>
+            </td>
+            <td style="padding:10px 12px;text-align:center">
+              <button onclick="removeFromQueue(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px" title="Xóa">×</button>
+            </td>
+          </tr>`).join('')
+        +'</tbody></table>'
+    )
+    +'</div>';
+}
+
+function copyQueueToClipboard(){
+  const q = getArticleQueue();
+  if(!q.length){ toast('Danh sách trống','err'); return; }
+  const header = 'Title\tURL\tTag/Topic\tKeyword';
+  const rows = q.map(item => [item.title, item.slug||'', item.topic||'', item.keyword||''].join('\t'));
+  const tsv = [header, ...rows].join('\n');
+  navigator.clipboard.writeText(tsv).then(()=>{
+    toast('✓ Đã copy! Paste thẳng vào Google Sheet (Ctrl+V)','ok');
+  }).catch(()=>{
+    // Fallback: textarea select
+    const ta = document.createElement('textarea');
+    ta.value = tsv; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    toast('✓ Đã copy! Paste vào Google Sheet','ok');
+  });
+}
+
+function clearQueue(){
+  if(!confirm('Xóa toàn bộ danh sách bài viết?')) return;
+  saveArticleQueue([]);
+  renderArticleQueuePage();
+}
+
 function createFromGap(gap){
-  // Pre-fill the article creation modal with gap data
-  openModal();
-  setTimeout(()=>{
-    const titleInput = document.getElementById('kw-input');
-    if(titleInput && gap.title) titleInput.value = gap.title;
-  }, 300);
-  toast('Đã điền thông tin bài viết từ content gap','ok');
+  addToQueue(gap);
 }
 
 // Load saved CP data
