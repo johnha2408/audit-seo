@@ -3303,10 +3303,8 @@ document.getElementById('aaModal').addEventListener('click',e=>{ if(e.target.id=
 // init IL count
 updateILCount();
 
-</script>
-</body>
-</html// ── SETTINGS ──
-function getApiKey(){ return localStorage.getItem('genseo_api_key') || ''; }
+
+// ── SETTINGS ──
 function getClaudeKey(){ return ''; } // deprecated
 function getClaudeModel(){ return 'claude-sonnet-4-6'; } // deprecated
 function getClaudeProxyUrl(){ return ''; } // deprecated
@@ -3361,5 +3359,6 @@ async function callAIUniversal(messages, maxTokens=2000){
   return d.choices?.[0]?.message?.content || '';
 }
 async function _callProvider(provider, messages, maxTokens){ return callAIUniversal(messages, maxTokens); }
-
->
+</script>
+</body>
+</html>
