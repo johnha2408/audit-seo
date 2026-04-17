@@ -541,29 +541,106 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
 
 <!-- SETTINGS MODAL -->
 <div class="modal-ov" id="settingsModal">
-  <div class="modal" style="max-width:460px">
+  <div class="modal" style="max-width:500px">
     <div class="m-header">
-      <div class="m-title">⚙ Cài đặt</div>
+      <div class="m-title">⚙ Cài đặt AI Provider</div>
       <div class="m-close" onclick="closeSettings()">✕</div>
     </div>
-    <div class="form-grp">
-      <label class="form-lbl">OpenRouter API Key <span class="req">*</span></label>
-      <input class="form-inp" id="apiKeyInput" type="password" placeholder="sk-or-v1-...">
-      <div class="form-hint">Key được lưu trong localStorage. Lấy key tại <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--green)">openrouter.ai/keys</a></div>
+
+    <!-- Provider Priority -->
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.7">
+      Tool sẽ dùng <strong style="color:var(--text2)">Provider chính</strong> trước. Nếu hết limit (429/529) thì tự động chuyển sang <strong style="color:var(--text2)">Fallback</strong>.
     </div>
-    <div class="form-grp" style="margin-top:14px">
-      <label class="form-lbl">Model AI <span class="hint">— dùng paid model nếu có credit</span></label>
-      <select class="form-inp" id="aiModelSelect" style="cursor:pointer" onchange="updateModelHint(this.value)">
-        <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3 (paid — khuyến nghị, có credit)</option>
-        <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 (paid)</option>
-        <option value="google/gemma-3-27b-it">Google Gemma 3 27B (paid)</option>
-        <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (paid)</option>
-        <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (FREE — rate limit thấp)</option>
-        <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (FREE — rate limit thấp)</option>
-        <option value="openrouter/free">OpenRouter Auto Free</option>
-      </select>
-      <div class="form-hint" id="modelHint" style="color:#f59e0b">⚠ Paid models dùng credit OpenRouter. Free models có rate limit 20 req/phút.</div>
+
+    <!-- Tab selector -->
+    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
+      <button id="settab-primary" onclick="showProviderTab('primary')"
+        style="flex:1;padding:8px;font-size:12px;font-family:inherit;cursor:pointer;border:none;background:var(--gdim);color:var(--green);font-weight:600">
+        ① Provider Chính
+      </button>
+      <button id="settab-fallback" onclick="showProviderTab('fallback')"
+        style="flex:1;padding:8px;font-size:12px;font-family:inherit;cursor:pointer;border:none;border-left:1px solid var(--border);background:var(--surface2);color:var(--text3)">
+        ② Fallback Provider
+      </button>
     </div>
+
+    <!-- Primary Provider Panel -->
+    <div id="settab-primary-panel">
+      <div class="form-grp">
+        <label class="form-lbl">Provider chính</label>
+        <select class="form-inp" id="primaryProvider" onchange="updateProviderUI('primary')">
+          <option value="claude">🟣 Anthropic Claude (API trực tiếp)</option>
+          <option value="openrouter">🟢 OpenRouter</option>
+        </select>
+      </div>
+      <!-- Claude primary -->
+      <div id="primary-claude-config" class="form-grp" style="margin-top:12px">
+        <label class="form-lbl">Anthropic API Key <span class="req">*</span></label>
+        <input class="form-inp" id="claudeKeyInput" type="password" placeholder="sk-ant-api03-...">
+        <div class="form-hint">Lấy key tại <a href="https://console.anthropic.com/keys" target="_blank" style="color:var(--green)">console.anthropic.com/keys</a></div>
+      </div>
+      <div id="primary-claude-model" class="form-grp" style="margin-top:10px">
+        <label class="form-lbl">Model Claude</label>
+        <select class="form-inp" id="claudeModelSelect">
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (khuyến nghị)</option>
+          <option value="claude-opus-4-6">Claude Opus 4.6 (mạnh nhất)</option>
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (nhanh/rẻ)</option>
+        </select>
+        <div class="form-hint" style="color:var(--green)">✓ Claude dùng trực tiếp — không qua proxy, không rate limit OpenRouter</div>
+      </div>
+      <!-- OpenRouter primary -->
+      <div id="primary-or-config" class="form-grp" style="margin-top:12px;display:none">
+        <label class="form-lbl">OpenRouter API Key <span class="req">*</span></label>
+        <input class="form-inp" id="apiKeyInput" type="password" placeholder="sk-or-v1-...">
+        <div class="form-hint">Lấy key tại <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--green)">openrouter.ai/keys</a></div>
+      </div>
+      <div id="primary-or-model" class="form-grp" style="margin-top:10px;display:none">
+        <label class="form-lbl">Model OpenRouter</label>
+        <select class="form-inp" id="aiModelSelect" onchange="updateModelHint(this.value)">
+          <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3 (paid — khuyến nghị)</option>
+          <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 (paid)</option>
+          <option value="google/gemma-3-27b-it">Google Gemma 3 27B (paid)</option>
+          <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (paid)</option>
+          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (FREE)</option>
+          <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (FREE)</option>
+        </select>
+        <div class="form-hint" id="modelHint">...</div>
+      </div>
+    </div>
+
+    <!-- Fallback Provider Panel -->
+    <div id="settab-fallback-panel" style="display:none">
+      <div class="form-grp">
+        <label class="form-lbl">Fallback provider (khi primary hết limit)</label>
+        <select class="form-inp" id="fallbackProvider" onchange="updateProviderUI('fallback')">
+          <option value="openrouter">🟢 OpenRouter (fallback)</option>
+          <option value="claude">🟣 Anthropic Claude (fallback)</option>
+          <option value="none">⛔ Không dùng fallback</option>
+        </select>
+      </div>
+      <div id="fallback-or-config" class="form-grp" style="margin-top:12px">
+        <label class="form-lbl">OpenRouter API Key</label>
+        <input class="form-inp" id="apiKeyInputFallback" type="password" placeholder="sk-or-v1-...">
+        <div class="form-hint" style="color:var(--text3)">Tự động dùng key này khi Claude bị rate limit</div>
+      </div>
+      <div id="fallback-or-model" class="form-grp" style="margin-top:10px">
+        <label class="form-lbl">Model OpenRouter (fallback)</label>
+        <select class="form-inp" id="aiModelSelectFallback">
+          <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3 (paid)</option>
+          <option value="deepseek/deepseek-v3.2">DeepSeek V3.2</option>
+          <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
+          <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (FREE)</option>
+        </select>
+      </div>
+      <div id="fallback-claude-config" style="display:none" class="form-grp" style="margin-top:12px">
+        <label class="form-lbl">Anthropic API Key (fallback)</label>
+        <input class="form-inp" id="claudeKeyFallback" type="password" placeholder="sk-ant-api03-...">
+      </div>
+    </div>
+
+    <!-- Status indicator -->
+    <div id="providerStatus" style="margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:7px;font-size:11.5px;color:var(--text3);line-height:1.8"></div>
+
     <div class="m-footer">
       <button class="btn-cancel" onclick="closeSettings()">Hủy</button>
       <button class="btn-submit" onclick="saveApiKey()">💾 Lưu cài đặt</button>
@@ -709,6 +786,7 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
 </div>
 
 <script>
+
 // ── STATE ──
 let plans = JSON.parse(localStorage.getItem('genseo_plans') || '[]');
 let curPlan = null;
@@ -716,6 +794,89 @@ let selSched = 'immediate';
 let selItems = new Set();
 
 function getApiKey(){ return localStorage.getItem('genseo_api_key') || ''; }
+
+// ── UNIVERSAL AI CALLER — auto-switch Claude ↔ OpenRouter ──
+let _lastProviderFailed = null;
+
+async function callAIUniversal(messages, maxTokens=2000){
+  const primary = getPrimaryProvider();
+  const fallback = getFallbackProvider();
+
+  // Try primary first
+  try {
+    const result = await _callProvider(primary, messages, maxTokens);
+    _lastProviderFailed = null;
+    return result;
+  } catch(err){
+    const isRateLimit = err.message.includes('429') || err.message.includes('529') || err.message.includes('rate') || err.message.includes('overloaded');
+    const isKeyError = err.message.includes('401') || err.message.includes('key') || err.message.includes('auth');
+    console.warn('Primary provider ('+primary+') failed:', err.message);
+    _lastProviderFailed = primary;
+    // Auto-fallback
+    if(fallback && fallback !== 'none' && fallback !== primary){
+      try {
+        console.log('→ Switching to fallback provider: '+fallback);
+        const result = await _callProvider(fallback, messages, maxTokens);
+        return result;
+      } catch(err2){
+        throw new Error('Cả hai provider đều fail. Primary ('+primary+'): '+err.message+' | Fallback ('+fallback+'): '+err2.message);
+      }
+    }
+    throw err;
+  }
+}
+
+async function _callProvider(provider, messages, maxTokens){
+  if(provider === 'claude'){
+    const claudeKey = getClaudeKey();
+    if(!claudeKey) throw new Error('401 Chưa có Anthropic API Key');
+    const model = getClaudeModel();
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: maxTokens,
+        messages: messages
+      })
+    });
+    if(r.status === 529 || r.status === 429){
+      throw new Error('429 Claude rate limit / overloaded');
+    }
+    if(!r.ok){
+      const e = await r.json().catch(()=>({}));
+      throw new Error(r.status+' Claude error: '+(e.error?.message||r.statusText));
+    }
+    const d = await r.json();
+    return d.content?.[0]?.text || '';
+
+  } else { // openrouter
+    const orKey = provider==='openrouter' ? getApiKey() : (getFallbackORKey()||getApiKey());
+    if(!orKey) throw new Error('401 Chưa có OpenRouter API Key');
+    const model = provider==='openrouter' ? getAIModel() : getFallbackORModel();
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer '+orKey,
+        'HTTP-Referer': 'https://genseo.app',
+        'X-Title': 'GenSEO'
+      },
+      body: JSON.stringify({ model, max_tokens: maxTokens, messages })
+    });
+    if(r.status === 429) throw new Error('429 OpenRouter rate limit');
+    if(!r.ok){
+      const e = await r.json().catch(()=>({}));
+      throw new Error(r.status+' OR error: '+(e.error?.message||r.statusText));
+    }
+    const d = await r.json();
+    return d.choices?.[0]?.message?.content || '';
+  }
+}
 function savePlans(){ localStorage.setItem('genseo_plans', JSON.stringify(plans)); }
 
 // ── INIT ──
@@ -784,7 +945,7 @@ function renderPlanList(){
 
 // ── MODAL ──
 function openModal(){
-  if(!getApiKey()){ toast('⚠ Chưa có OpenRouter API Key — nhấn ⚙ để cài đặt','err'); openSettings(); return; }
+  if(!getApiKey() && !getClaudeKey()){ toast('⚠ Chưa có API Key — nhấn ⚙ để cài đặt','err'); openSettings(); return; }
   document.getElementById('modal').classList.add('show');
   setTimeout(()=>document.getElementById('fName').focus(),100);
 }
@@ -800,38 +961,201 @@ function selRadio(el,val){
 }
 
 // ── SETTINGS ──
-function openSettings(){
-  document.getElementById('apiKeyInput').value = getApiKey();
-  const modelSel = document.getElementById('aiModelSelect');
-  if(modelSel){
-    modelSel.value = getAIModel();
-    updateModelHint(modelSel.value);
+
+// ── UNIVERSAL AI CALLER — auto-switch Claude ↔ OpenRouter ──
+
+
+async function callAIUniversal(messages, maxTokens=2000){
+  const primary = getPrimaryProvider();
+  const fallback = getFallbackProvider();
+
+  // Try primary first
+  try {
+    const result = await _callProvider(primary, messages, maxTokens);
+    _lastProviderFailed = null;
+    return result;
+  } catch(err){
+    const isRateLimit = err.message.includes('429') || err.message.includes('529') || err.message.includes('rate') || err.message.includes('overloaded');
+    const isKeyError = err.message.includes('401') || err.message.includes('key') || err.message.includes('auth');
+    console.warn('Primary provider ('+primary+') failed:', err.message);
+    _lastProviderFailed = primary;
+    // Auto-fallback
+    if(fallback && fallback !== 'none' && fallback !== primary){
+      try {
+        console.log('→ Switching to fallback provider: '+fallback);
+        const result = await _callProvider(fallback, messages, maxTokens);
+        return result;
+      } catch(err2){
+        throw new Error('Cả hai provider đều fail. Primary ('+primary+'): '+err.message+' | Fallback ('+fallback+'): '+err2.message);
+      }
+    }
+    throw err;
   }
+}
+
+async function _callProvider(provider, messages, maxTokens){
+  if(provider === 'claude'){
+    const claudeKey = getClaudeKey();
+    if(!claudeKey) throw new Error('401 Chưa có Anthropic API Key');
+    const model = getClaudeModel();
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: maxTokens,
+        messages: messages
+      })
+    });
+    if(r.status === 529 || r.status === 429){
+      throw new Error('429 Claude rate limit / overloaded');
+    }
+    if(!r.ok){
+      const e = await r.json().catch(()=>({}));
+      throw new Error(r.status+' Claude error: '+(e.error?.message||r.statusText));
+    }
+    const d = await r.json();
+    return d.content?.[0]?.text || '';
+
+  } else { // openrouter
+    const orKey = provider==='openrouter' ? getApiKey() : (getFallbackORKey()||getApiKey());
+    if(!orKey) throw new Error('401 Chưa có OpenRouter API Key');
+    const model = provider==='openrouter' ? getAIModel() : getFallbackORModel();
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer '+orKey,
+        'HTTP-Referer': 'https://genseo.app',
+        'X-Title': 'GenSEO'
+      },
+      body: JSON.stringify({ model, max_tokens: maxTokens, messages })
+    });
+    if(r.status === 429) throw new Error('429 OpenRouter rate limit');
+    if(!r.ok){
+      const e = await r.json().catch(()=>({}));
+      throw new Error(r.status+' OR error: '+(e.error?.message||r.statusText));
+    }
+    const d = await r.json();
+    return d.choices?.[0]?.message?.content || '';
+  }
+}
+function getClaudeKey(){ return localStorage.getItem('genseo_claude_key') || ''; }
+function getAIModel(){ return localStorage.getItem('genseo_ai_model') || 'deepseek/deepseek-chat-v3-0324'; }
+function getClaudeModel(){ return localStorage.getItem('genseo_claude_model') || 'claude-sonnet-4-6'; }
+function getPrimaryProvider(){ return localStorage.getItem('genseo_primary_provider') || 'openrouter'; }
+function getFallbackProvider(){ return localStorage.getItem('genseo_fallback_provider') || 'openrouter'; }
+function getFallbackORKey(){ return localStorage.getItem('genseo_fallback_or_key') || getApiKey(); }
+function getFallbackORModel(){ return localStorage.getItem('genseo_fallback_or_model') || 'deepseek/deepseek-chat-v3-0324'; }
+
+function openSettings(){
+  // Load saved values
+  const primary = getPrimaryProvider();
+  const fallback = getFallbackProvider();
+  document.getElementById('primaryProvider').value = primary;
+  document.getElementById('fallbackProvider').value = fallback;
+  document.getElementById('claudeKeyInput').value = getClaudeKey();
+  document.getElementById('claudeModelSelect').value = getClaudeModel();
+  document.getElementById('apiKeyInput').value = getApiKey();
+  document.getElementById('aiModelSelect').value = getAIModel();
+  document.getElementById('apiKeyInputFallback').value = getFallbackORKey();
+  document.getElementById('aiModelSelectFallback').value = getFallbackORModel();
+  updateProviderUI('primary');
+  updateProviderUI('fallback');
+  updateModelHint(getAIModel());
+  updateProviderStatus();
   document.getElementById('settingsModal').classList.add('show');
+}
+
+function showProviderTab(tab){
+  ['primary','fallback'].forEach(t => {
+    document.getElementById('settab-'+t).style.background = t===tab?'var(--gdim)':'var(--surface2)';
+    document.getElementById('settab-'+t).style.color = t===tab?'var(--green)':'var(--text3)';
+    document.getElementById('settab-'+t).style.fontWeight = t===tab?'600':'400';
+    document.getElementById('settab-'+t+'-panel').style.display = t===tab?'block':'none';
+  });
+}
+
+function updateProviderUI(side){
+  const provider = document.getElementById(side+'Provider').value;
+  if(side==='primary'){
+    document.getElementById('primary-claude-config').style.display = provider==='claude'?'block':'none';
+    document.getElementById('primary-claude-model').style.display = provider==='claude'?'block':'none';
+    document.getElementById('primary-or-config').style.display = provider==='openrouter'?'block':'none';
+    document.getElementById('primary-or-model').style.display = provider==='openrouter'?'block':'none';
+  } else {
+    document.getElementById('fallback-or-config').style.display = provider==='openrouter'?'block':'none';
+    document.getElementById('fallback-or-model').style.display = provider==='openrouter'?'block':'none';
+    document.getElementById('fallback-claude-config').style.display = provider==='claude'?'block':'none';
+  }
+  updateProviderStatus();
+}
+
+function updateProviderStatus(){
+  const primary = document.getElementById('primaryProvider')?.value || getPrimaryProvider();
+  const fallback = document.getElementById('fallbackProvider')?.value || getFallbackProvider();
+  const hasClaude = !!(document.getElementById('claudeKeyInput')?.value.trim() || getClaudeKey());
+  const hasOR = !!(document.getElementById('apiKeyInput')?.value.trim() || getApiKey());
+  const el = document.getElementById('providerStatus');
+  if(!el) return;
+  const rows = [];
+  rows.push('① <strong style="color:var(--text2)">Primary:</strong> '
+    +(primary==='claude'
+      ? (hasClaude?'🟣 Claude API ✓':'🟣 Claude API <span style="color:#f87171">— chưa có key</span>')
+      : (hasOR?'🟢 OpenRouter ✓':'🟢 OpenRouter <span style="color:#f87171">— chưa có key</span>')));
+  if(fallback!=='none'){
+    rows.push('② <strong style="color:var(--text2)">Fallback:</strong> '
+      +(fallback==='openrouter'
+        ? (hasOR?'🟢 OpenRouter ✓ (auto-switch khi primary 429)':'🟢 OpenRouter <span style="color:#f87171">— chưa có key</span>')
+        : (hasClaude?'🟣 Claude API ✓':'🟣 Claude <span style="color:#f87171">— chưa có key</span>')));
+  } else {
+    rows.push('② <strong style="color:var(--text2)">Fallback:</strong> <span style="color:var(--text3)">Tắt</span>');
+  }
+  el.innerHTML = rows.join('<br>');
 }
 
 function updateModelHint(val){
   const hint = document.getElementById('modelHint');
   if(!hint) return;
-  if(val.includes(':free') || val === 'openrouter/free'){
+  if(val && (val.includes(':free') || val === 'openrouter/free')){
     hint.style.color = '#f59e0b';
-    hint.textContent = '⚠ Free model: rate limit ~20 req/phút. Dễ bị 429 khi apply nhiều bài.';
+    hint.textContent = '⚠ Free model: rate limit ~20 req/phút.';
   } else {
     hint.style.color = 'var(--green)';
-    hint.textContent = '✓ Paid model: dùng credit OpenRouter, không bị rate limit free tier.';
+    hint.textContent = '✓ Paid model: dùng credit, không bị rate limit free tier.';
   }
 }
+
 function closeSettings(){ document.getElementById('settingsModal').classList.remove('show'); }
-function getAIModel(){ return localStorage.getItem('genseo_ai_model') || 'deepseek/deepseek-chat-v3-0324'; }
 
 function saveApiKey(){
-  const k = document.getElementById('apiKeyInput').value.trim();
-  if(!k){ toast('Nhập API Key đi bạn','err'); return; }
-  localStorage.setItem('genseo_api_key', k);
-  const model = document.getElementById('aiModelSelect')?.value;
-  if(model) localStorage.setItem('genseo_ai_model', model);
+  const primary = document.getElementById('primaryProvider').value;
+  const fallback = document.getElementById('fallbackProvider').value;
+  // Save all keys
+  const claudeKey = document.getElementById('claudeKeyInput').value.trim();
+  const orKey = document.getElementById('apiKeyInput').value.trim();
+  const fallbackOrKey = document.getElementById('apiKeyInputFallback').value.trim();
+  const claudeModel = document.getElementById('claudeModelSelect').value;
+  const orModel = document.getElementById('aiModelSelect').value;
+  const fallbackOrModel = document.getElementById('aiModelSelectFallback').value;
+  // Validate primary
+  if(primary==='claude' && !claudeKey){ toast('Nhập Anthropic API Key','err'); return; }
+  if(primary==='openrouter' && !orKey){ toast('Nhập OpenRouter API Key','err'); return; }
+  // Save
+  if(claudeKey) localStorage.setItem('genseo_claude_key', claudeKey);
+  if(orKey) localStorage.setItem('genseo_api_key', orKey);
+  if(fallbackOrKey) localStorage.setItem('genseo_fallback_or_key', fallbackOrKey);
+  localStorage.setItem('genseo_primary_provider', primary);
+  localStorage.setItem('genseo_fallback_provider', fallback);
+  localStorage.setItem('genseo_claude_model', claudeModel);
+  localStorage.setItem('genseo_ai_model', orModel);
+  localStorage.setItem('genseo_fallback_or_model', fallbackOrModel);
   closeSettings();
-  toast('Đã lưu cài đặt ✓','ok');
+  toast('Đã lưu cài đặt ✓ — Primary: '+(primary==='claude'?'Claude':'OpenRouter')+', Fallback: '+fallback,'ok');
 }
 
 // ── CREATE PLAN ──
@@ -1876,11 +2200,10 @@ async function applyLinks(postIds){
         await new Promise(r=>setTimeout(r, wait));
       }
       try {
-        const aiResp = await fetch('https://openrouter.ai/api/v1/chat/completions',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
-          body: JSON.stringify({model:getAIModel(), max_tokens:1200, messages:[{role:'user',content:writePrompt}]})
-        });
+        const aiResp = { ok: true, status: 200, _universalResult: null };
+        try { aiResp._universalResult = await callAIUniversal([{role:'user',content:writePrompt}], 1200); }
+        catch(awErr){ aiResp.ok = false; aiResp._error = awErr.message; }
+        // Fake response object for compatibility
         if(aiResp.status === 429){ continue; } // retry
         if(aiResp.ok){
           const aiData = await aiResp.json();
@@ -3113,14 +3436,15 @@ async function runContentPlan(){
         +'}';
 
       try {
-        const resp = await fetch('https://openrouter.ai/api/v1/chat/completions',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey,'HTTP-Referer':'https://genseo.app','X-Title':'GenSEO'},
-          body: JSON.stringify({model:getAIModel(), max_tokens:4000, messages:[{role:'user',content:prompt}]})
-        });
-        if(!resp.ok) throw new Error('AI error '+resp.status);
-        const aiData = await resp.json();
-        const txt = (aiData.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
+        let txt = '';
+        try {
+          txt = await callAIUniversal([{role:'user',content:prompt}], 4000);
+          addLog('✓ AI response via '+(getPrimaryProvider()===_lastProviderFailed?'fallback':'primary')+' provider');
+        } catch(aiErr){
+          addLog('⚠ AI error: '+aiErr.message);
+          throw aiErr;
+        }
+        txt = txt.replace(/```json|```/g,'').trim();
         const jsonM = txt.match(/\{[\s\S]*\}/);
         if(jsonM){
           const parsed = JSON.parse(jsonM[0]);
@@ -3419,6 +3743,7 @@ document.getElementById('aaModal').addEventListener('click',e=>{ if(e.target.id=
 
 // init IL count
 updateILCount();
+
 </script>
 </body>
 </html>
