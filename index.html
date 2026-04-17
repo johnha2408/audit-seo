@@ -3477,26 +3477,88 @@ function renderCPGapsTab(gaps){
 
 function renderCPNewTopicsTab(newTopics){
   if(!newTopics.length) return '<div style="padding:24px;color:var(--text3);font-size:12px">Chưa có dữ liệu topic mở rộng</div>';
-  // Flatten all articles from all topics into rows
-  const rows = [];
-  newTopics.forEach(t => (t.articles||[]).forEach(a => rows.push({...a, topic: t.topic, source:'new_topic'})));
+
+  const totalArticles = newTopics.reduce((a,t)=>a+(t.articles||[]).length,0);
+  const queue = getArticleQueue();
+  const queueSlugs = new Set(queue.map(q=>q.slug||q.title));
+
+  let globalIdx = 0;
+  const topicBlocks = newTopics.map(t => {
+    const articles = t.articles||[];
+    if(!articles.length) return '';
+
+    const articleRows = articles.map(a => {
+      globalIdx++;
+      const idx = globalIdx;
+      const inQueue = queueSlugs.has(a.slug||a.title);
+      const safeA = JSON.stringify({...a, topic: t.topic, source:'new_topic'}).replace(/"/g,'&quot;');
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 10px;color:var(--text3);font-size:11px;font-family:monospace;white-space:nowrap">${idx}</td>
+        <td style="padding:8px 10px">
+          <div style="font-size:13px;font-weight:500;color:var(--text)">${a.title||'Untitled'}</div>
+          ${a.keyword?`<div style="font-size:10.5px;color:var(--text3);margin-top:2px">🔑 ${a.keyword}</div>`:''}
+        </td>
+        <td style="padding:8px 10px;font-size:11px;color:var(--text3);font-family:monospace">${a.slug||'—'}</td>
+        <td style="padding:8px 10px;text-align:right">
+          <button onclick="addToQueue(${safeA})" style="background:${inQueue?'var(--gdim)':'var(--green)'};color:${inQueue?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">
+            ${inQueue?'✓ Đã thêm':'+ Thêm'}
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `<div style="margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <!-- Topic header -->
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)">
+        <span style="font-size:13px">💡</span>
+        <div style="flex:1">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">${t.topic}</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:8px">${articles.length} bài</span>
+        </div>
+        ${t.rationale?`<span style="font-size:11px;color:var(--text3);max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.rationale}</span>`:''}
+        <button onclick="addAllTopicToQueue('${t.topic.replace(/'/g,"\'")}')" class="btn-outline" style="font-size:10.5px;white-space:nowrap">+ Thêm tất cả</button>
+      </div>
+      <!-- Articles table -->
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text3);font-weight:500;width:36px">#</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text3);font-weight:500">Title</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10.5px;color:var(--text3);font-weight:500">URL</th>
+          <th style="padding:7px 10px;width:90px"></th>
+        </tr></thead>
+        <tbody>${articleRows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
 
   return '<div style="padding:16px">'
-    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
-    +'<span style="font-size:12px;color:var(--text3)">'+rows.length+' bài viết mới nên phát triển</span>'
-    +"<button class=\"btn-outline\" onclick=\"showView('articles')\" style=\"font-size:11px;margin-left:auto\">📋 Xem danh sách bài ("+getArticleQueue().length+")</button>"
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<span style="font-size:12px;color:var(--text3)">'+newTopics.length+' topics · '+totalArticles+' bài viết mới</span>'
+    +'<button class="btn-outline" onclick="showView(\'articles\')" style="font-size:11px;margin-left:auto">📋 Danh sách bài ('+getArticleQueue().length+')</button>'
     +'</div>'
-    +'<table style="width:100%;border-collapse:collapse">'
-    +'<thead><tr style="border-bottom:2px solid var(--border)">'
-    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500;width:36px">#</th>'
-    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Title</th>'
-    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">URL</th>'
-    +'<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Topic</th>'
-    +'<th style="padding:8px 10px;width:90px"></th>'
-    +'</tr></thead>'
-    +'<tbody>'+renderGapTable(rows, false)+'</tbody>'
-    +'</table>'
+    +topicBlocks
     +'</div>';
+}
+
+// Add all articles of a topic to queue at once
+function addAllTopicToQueue(topicName){
+  if(!cpData) return;
+  const t = (cpData.newTopics||[]).find(t=>t.topic===topicName);
+  if(!t){ toast('Không tìm thấy topic','err'); return; }
+  const q = getArticleQueue();
+  const queueSlugs = new Set(q.map(x=>x.slug||x.title));
+  let added = 0;
+  (t.articles||[]).forEach(a => {
+    const key = a.slug||a.title;
+    if(!queueSlugs.has(key)){
+      q.push({ title:a.title||'', slug:a.slug||'', topic:t.topic, keyword:a.keyword||'', source:'new_topic', addedAt:new Date().toLocaleDateString('vi-VN') });
+      queueSlugs.add(key);
+      added++;
+    }
+  });
+  saveArticleQueue(q);
+  toast('✓ Đã thêm '+added+' bài vào danh sách','ok');
+  showCPTab('cp-newtopics');
 }
 
 function renderCPOrphansTab(orphans){
