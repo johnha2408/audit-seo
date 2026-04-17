@@ -3126,53 +3126,77 @@ async function runContentPlan(){
 }
 
 async function fetchSitemapUrls(url, addLog){
-  // Multiple CORS proxy fallbacks
-  const PROXIES = [
-    u => 'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
-    u => 'https://corsproxy.io/?'+encodeURIComponent(u),
-    u => 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u),
-    u => 'https://proxy.cors.sh/'+u,
-    u => 'https://cors-anywhere.herokuapp.com/'+u,
-  ];
+  const parseUrls = xml => [...xml.matchAll(/<loc>\s*(.*?)\s*<\/loc>/g)]
+    .map(m=>m[1].trim()).filter(u=>/^https?:\/\//.test(u));
 
-  async function fetchXML(targetUrl){
-    for(let pi=0; pi<PROXIES.length; pi++){
-      try {
-        const proxyUrl = PROXIES[pi](targetUrl);
-        addLog('  → Thử proxy '+(pi+1)+'/'+PROXIES.length+': '+proxyUrl.split('?')[0].split('/').pop()+'...');
-        const r = await fetch(proxyUrl, {signal: AbortSignal.timeout(8000)});
-        if(!r.ok) continue;
-        const txt = await r.text();
-        // allorigins raw returns JSON wrapper sometimes
-        if(txt.trim().startsWith('{') && txt.includes('"contents"')){
-          const j = JSON.parse(txt);
-          return j.contents || j.body || txt;
-        }
-        if(txt.includes('<') && (txt.includes('<urlset') || txt.includes('<sitemapindex') || txt.includes('<loc>'))) return txt;
-      } catch(e){ addLog('  ⚠ Proxy '+(pi+1)+' fail: '+e.message.substring(0,40)); }
-    }
-    throw new Error('Tất cả CORS proxy đều fail. Hãy dán danh sách URLs trực tiếp vào ô nhập.');
+  // Strategy 1: Dùng Cloudflare Worker nếu đã cài (nhanh nhất, không bị CORS)
+  const workerUrl = getClaudeProxyUrl(); // reuse worker URL field
+  async function fetchViaWorker(targetUrl){
+    if(!workerUrl) throw new Error('No worker');
+    // Worker cần hỗ trợ endpoint /fetch?url=... — dùng worker đã có
+    const r = await fetch(workerUrl.replace(/\/claude$/, '')+'/fetch?url='+encodeURIComponent(targetUrl),
+      {signal: AbortSignal.timeout(5000)});
+    if(!r.ok) throw new Error('Worker '+r.status);
+    return r.text();
   }
 
-  const parseUrls = xml => [...xml.matchAll(/<loc>\s*(.*?)\s*<\/loc>/g)].map(m=>m[1].trim()).filter(u=>/^https?:\/\//.test(u));
+  // Strategy 2: Race 3 proxy cùng lúc — lấy cái nào nhanh nhất
+  async function fetchXML(targetUrl){
+    // Thử Worker trước nếu có
+    if(workerUrl){
+      try { 
+        addLog('  → Thử Cloudflare Worker...');
+        const txt = await fetchViaWorker(targetUrl);
+        if(txt.includes('<loc>')) return txt;
+      } catch(e){}
+    }
+
+    // Race 3 proxy cùng lúc thay vì sequential
+    const PROXIES = [
+      'https://api.allorigins.win/raw?url='+encodeURIComponent(targetUrl),
+      'https://corsproxy.io/?'+encodeURIComponent(targetUrl),
+      'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(targetUrl),
+    ];
+
+    addLog('  → Racing 3 proxies song song...');
+    
+    // Tạo promise cho mỗi proxy với timeout 6s
+    const racePromises = PROXIES.map(async (proxyUrl) => {
+      const r = await fetch(proxyUrl, {signal: AbortSignal.timeout(6000)});
+      if(!r.ok) throw new Error(r.status);
+      const txt = await r.text();
+      const xml = txt.trim().startsWith('{') ? (JSON.parse(txt).contents||txt) : txt;
+      if(!xml.includes('<loc>')) throw new Error('Invalid XML');
+      return xml;
+    });
+
+    // Promise.any() lấy cái đầu tiên thành công
+    try {
+      return await Promise.any(racePromises);
+    } catch(e){
+      throw new Error('Tất cả proxy đều fail. Hãy paste danh sách URLs trực tiếp vào ô nhập.');
+    }
+  }
 
   addLog('→ Fetching: '+url);
   const xml = await fetchXML(url);
 
   if(xml.includes('<sitemapindex')){
-    addLog('→ Sitemap index — đang fetch child sitemaps...');
-    const childUrls = parseUrls(xml).filter(u=>u.endsWith('.xml')||u.includes('sitemap'));
+    addLog('→ Sitemap index — đang fetch child sitemaps song song...');
+    const childUrls = parseUrls(xml).filter(u=>u.endsWith('.xml')||u.includes('sitemap')).slice(0,15);
     addLog('  → Tìm thấy '+childUrls.length+' child sitemaps');
+    // Fetch TẤT CẢ child sitemaps song song thay vì sequential
+    const results = await Promise.allSettled(childUrls.map(cu => fetchXML(cu)));
     let all = [];
-    for(const cu of childUrls.slice(0,15)){
-      try {
-        const cxml = await fetchXML(cu);
-        const locs = parseUrls(cxml);
+    results.forEach((res, i) => {
+      if(res.status==='fulfilled'){
+        const locs = parseUrls(res.value);
         all.push(...locs);
-        addLog('  ✓ '+cu.split('/').pop()+': '+locs.length+' URLs');
-        await new Promise(r=>setTimeout(r,300));
-      } catch(e){ addLog('  ⚠ Skip '+cu.split('/').pop()+': '+e.message.substring(0,50)); }
-    }
+        addLog('  ✓ '+childUrls[i].split('/').pop()+': '+locs.length+' URLs');
+      } else {
+        addLog('  ⚠ Skip '+childUrls[i].split('/').pop());
+      }
+    });
     return all;
   } else {
     const locs = parseUrls(xml);
