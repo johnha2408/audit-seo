@@ -3580,11 +3580,12 @@ function renderCPGapsTab(gaps){
   const allRows = [...sorted, ...competitorGaps];
 
   return '<div style="padding:16px">'
-    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
     +'<span style="font-size:12px;color:var(--text3)">'+allRows.length+' content gaps</span>'
     +'<button class="btn-outline" id="compGapBtn" onclick="searchCompetitorGaps()" style="font-size:11px">🔍 Tìm gaps từ đối thủ</button>'
     +(competitorGaps.length?'<span style="font-size:11px;color:#60a5fa">+ '+competitorGaps.length+' competitor gaps</span>':'')
-    +"<button class=\"btn-outline\" onclick=\"showView('articles')\" style=\"font-size:11px;margin-left:auto\">📋 Xem danh sách bài ("+getArticleQueue().length+")</button>"
+    +'<button onclick="addAllGapsToQueue()" style="background:var(--green);color:#000;border:none;border-radius:5px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">+ Thêm tất cả</button>'
+    +"<button class=\"btn-outline\" onclick=\"showView('articles')\" style=\"font-size:11px;margin-left:auto\">📋 Danh sách bài ("+getArticleQueue().length+")</button>"
     +'</div>'
     +'<table style="width:100%;border-collapse:collapse">'
     +'<thead><tr style="border-bottom:2px solid var(--border)">'
