@@ -3063,14 +3063,26 @@ async function runContentPlan(){
           return (i+1)+'. '+slug;
         }).join('\n');
 
-        const prompt = 'SEO strategist. Analyze slugs from site: '+domain+'\n'
-          +'Language: '+lang+'. Base: https://'+domain+'\n\n'
-          +'Slugs:\n'+slugList+'\n\n'
-          +'Return ONLY compact JSON (no markdown, no explanation):\n'
-          +'{"clusters":[{"topic":"T","pillar_url":"full-url","pillar_title":"Title",'
-          +'"clusters":[{"url":"full-url","title":"T"}],"tags":["t"],"health":"strong|thin|critical"}],'
-          +'"gaps":[{"topic":"T","type":"g","title":"T","keyword":"k","slug":"/s/","wordcount":1200,"priority":"high|medium|low","intent":"informational|commercial","schema":"Article|FAQPage|HowTo"}],'
-          +'"orphans":["slug"],"new_topics":[{"topic":"T","rationale":"r","articles":[{"title":"T","keyword":"k","slug":"/s/","priority":"high"}]}]}';
+        // Collect existing slugs to avoid duplicates in suggestions
+        const existingSlugs = pages.map(p=>p.url.replace(/^https?:\/\/[^\/]+/,'').replace(/\/$/, '').toLowerCase());
+
+        const prompt = 'You are a senior SEO & GEO content strategist. Site: '+domain+' | Lang: '+lang+'\n\n'
+          +'EXISTING SLUGS (DO NOT suggest these):\n'+existingSlugs.slice(0,50).join('\n')+'\n\n'
+          +'BATCH SLUGS TO ANALYZE:\n'+slugList+'\n\n'
+          +'TASK: Analyze these slugs and return JSON with:\n'
+          +'1. clusters: group into pillar-cluster topics\n'
+          +'2. gaps: 3-5 missing articles per topic (SEO-optimized, not in existing slugs)\n'
+          +'3. new_topics: 2-3 new topic areas with 5-8 articles EACH (SEO+GEO optimized).\n'
+          +'   For new_topics articles: mix informational (how-to, guide, tips) + commercial (best, cost, compare) + local GEO (include city/location if relevant).\n'
+          +'   Each article needs: specific title, primary keyword, URL slug, intent (informational/commercial/local).\n'
+          +'   IMPORTANT: never duplicate existing slugs. Generate 5-8 diverse articles per topic.\n\n'
+          +'Return ONLY compact JSON (no markdown):\n'
+          +'{"clusters":[{"topic":"T","pillar_url":"https://'+domain+'/full-path/","pillar_title":"T","clusters":[{"url":"https://'+domain+'/path/","title":"T"}],"tags":["t"],"health":"strong|thin|critical"}],'
+          +'"gaps":[{"topic":"T","type":"missing guide","title":"T","keyword":"k","slug":"/blog/slug/","wordcount":1200,"priority":"high|medium|low","intent":"informational|commercial","schema":"Article|FAQPage|HowTo"}],'
+          +'"orphans":["/slug/"],'
+          +'"new_topics":[{"topic":"Topic Name","rationale":"why expand","articles":['
+          +'{"title":"Full Article Title","keyword":"primary kw","slug":"/blog/slug/","intent":"informational|commercial|local"},'
+          +'{"title":"...5-8 total articles per topic...","keyword":"kw","slug":"/blog/slug/","intent":"..."}]}]}';
 
         try {
           const timeoutP = new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 45s')),45000));
