@@ -3009,17 +3009,34 @@ async function runContentPlan(){
     setProgress(5, 'Fetching sitemap...');
     let urls = [];
 
-    if(input.startsWith('http')){
+    if(input.startsWith('http') && !input.includes('\n')){
       urls = await fetchSitemapUrls(input, addLog);
-    } else if(input.includes('<loc>') || input.includes('<?xml')){
-      // Pasted XML sitemap content — extract <loc> tags
-      const locMatches = [...input.matchAll(/<loc>\s*(.*?)\s*<\/loc>/g)].map(m=>m[1].trim()).filter(u=>u.startsWith('http'));
-      urls = locMatches;
-      addLog('✓ Đọc '+urls.length+' URLs từ XML paste');
     } else {
-      // Plain URL list — one per line
-      urls = input.split('\n').map(l=>l.trim()).filter(l=>l.startsWith('http'));
-      addLog('✓ Đọc '+urls.length+' URLs từ danh sách');
+      // Smart paste parser — handles XML, plain URLs, or WP sitemap table (mixed text)
+      const lines = input.split('\n').map(l=>l.trim()).filter(Boolean);
+      const extracted = new Set();
+
+      // Method 1: extract from <loc> tags (XML)
+      const locMatches = [...input.matchAll(/<loc>\s*(https?[^<]+?)\s*<\/loc>/g)];
+      locMatches.forEach(m => extracted.add(m[1].trim()));
+
+      // Method 2: extract all http URLs from any text (handles WP table, mixed content)
+      const urlMatches = [...input.matchAll(/https?:\/\/[^\s<>"'\t]+/g)];
+      urlMatches.forEach(m => {
+        const u = m[0].replace(/[.,;)]+$/, ''); // strip trailing punctuation
+        if(u.startsWith('http')) extracted.add(u);
+      });
+
+      urls = [...extracted].filter(u => {
+        // Filter out dates, numbers, irrelevant URLs
+        try { new URL(u); } catch(e){ return false; }
+        // Skip admin, wp-content, media files, dates that got parsed as URLs
+        return !/\.(jpg|jpeg|png|gif|pdf|mp4|svg|ico|css|js)(\?|$)/i.test(u)
+            && !/\/wp-(admin|content|includes)\//i.test(u)
+            && !/\/feed\//i.test(u);
+      });
+
+      addLog('✓ Đọc '+urls.length+' URLs từ paste (smart parse)');
     }
 
     if(!urls.length) throw new Error('Không tìm thấy URL nào. Kiểm tra lại sitemap URL.');
