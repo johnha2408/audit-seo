@@ -541,112 +541,25 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
 
 <!-- SETTINGS MODAL -->
 <div class="modal-ov" id="settingsModal">
-  <div class="modal" style="max-width:500px">
+  <div class="modal" style="max-width:440px">
     <div class="m-header">
-      <div class="m-title">⚙ Cài đặt AI Provider</div>
+      <div class="m-title">⚙ Cài đặt</div>
       <div class="m-close" onclick="closeSettings()">✕</div>
     </div>
-
-    <!-- Provider Priority -->
-    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.7">
-      Tool sẽ dùng <strong style="color:var(--text2)">Provider chính</strong> trước. Nếu hết limit (429/529) thì tự động chuyển sang <strong style="color:var(--text2)">Fallback</strong>.
+    <div class="form-grp">
+      <label class="form-lbl">OpenRouter API Key <span class="req">*</span></label>
+      <input class="form-inp" id="apiKeyInput" type="password" placeholder="sk-or-v1-...">
+      <div class="form-hint">Lấy key miễn phí tại <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--green)">openrouter.ai/keys</a></div>
     </div>
-
-    <!-- Tab selector -->
-    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">
-      <button id="settab-primary" onclick="showProviderTab('primary')"
-        style="flex:1;padding:8px;font-size:12px;font-family:inherit;cursor:pointer;border:none;background:var(--gdim);color:var(--green);font-weight:600">
-        ① Provider Chính
-      </button>
-      <button id="settab-fallback" onclick="showProviderTab('fallback')"
-        style="flex:1;padding:8px;font-size:12px;font-family:inherit;cursor:pointer;border:none;border-left:1px solid var(--border);background:var(--surface2);color:var(--text3)">
-        ② Fallback Provider
-      </button>
+    <div class="form-grp" style="margin-top:14px">
+      <label class="form-lbl">Model AI</label>
+      <select class="form-inp" id="aiModelSelect" onchange="updateModelHint(this.value)">
+        <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3.0324 (paid — khuyến nghị)</option>
+        <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 (paid)</option>
+        <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (FREE — rate limit)</option>
+      </select>
+      <div class="form-hint" id="modelHint" style="color:var(--green)">✓ DeepSeek — nhanh, rẻ, không bị CORS.</div>
     </div>
-
-    <!-- Primary Provider Panel -->
-    <div id="settab-primary-panel">
-      <div class="form-grp">
-        <label class="form-lbl">Provider chính</label>
-        <select class="form-inp" id="primaryProvider" onchange="updateProviderUI('primary')">
-          <option value="openrouter">🟢 OpenRouter (DeepSeek/Llama - khuyến nghị)</option>
-          <option value="claude-proxy">🟣 Claude API (qua Cloudflare Worker proxy)</option>
-        </select>
-      </div>
-      <!-- Claude via Cloudflare Worker proxy -->
-      <div id="primary-claude-config" class="form-grp" style="margin-top:12px;display:none">
-        <div style="background:#1e3a5f22;border:1px solid #60a5fa33;border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;line-height:1.8">
-          <strong style="color:#60a5fa">🔧 Setup Cloudflare Worker (miễn phí, 2 phút)</strong><br>
-          <span style="color:var(--text3)">1. Vào <a href="https://workers.cloudflare.com" target="_blank" style="color:var(--green)">workers.cloudflare.com</a> → Create Worker<br>
-          2. Copy code worker bên dưới → Deploy<br>
-          3. Dán Worker URL vào ô bên dưới</span><br>
-          <button onclick="showWorkerCode()" class="btn-outline" style="font-size:10.5px;margin-top:6px">📋 Xem Worker Code</button>
-        </div>
-        <label class="form-lbl">Anthropic API Key <span class="req">*</span></label>
-        <input class="form-inp" id="claudeKeyInput" type="password" placeholder="sk-ant-api03-...">
-        <div class="form-hint">Lấy key tại <a href="https://console.anthropic.com/keys" target="_blank" style="color:var(--green)">console.anthropic.com/keys</a></div>
-        <label class="form-lbl" style="margin-top:10px">Cloudflare Worker URL <span class="req">*</span></label>
-        <input class="form-inp" id="claudeProxyUrl" type="text" placeholder="https://your-worker.workers.dev/claude">
-        <div class="form-hint" style="color:var(--text3)">URL của Worker đã deploy. Worker sẽ forward request đến Anthropic API và thêm CORS headers.</div>
-      </div>
-      <div id="primary-claude-model" class="form-grp" style="margin-top:10px;display:none">
-        <label class="form-lbl">Model Claude</label>
-        <select class="form-inp" id="claudeModelSelect">
-          <option value="claude-sonnet-4-6">claude-sonnet-4-6 (khuyến nghị)</option>
-          <option value="claude-opus-4-6">claude-opus-4-6 (mạnh nhất)</option>
-          <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001 (nhanh/rẻ)</option>
-        </select>
-      </div>
-      <!-- OpenRouter primary -->
-      <div id="primary-or-config" class="form-grp" style="margin-top:12px;display:none">
-        <label class="form-lbl">OpenRouter API Key <span class="req">*</span></label>
-        <input class="form-inp" id="apiKeyInput" type="password" placeholder="sk-or-v1-...">
-        <div class="form-hint">Lấy key tại <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--green)">openrouter.ai/keys</a></div>
-      </div>
-      <div id="primary-or-model" class="form-grp" style="margin-top:10px;display:none">
-        <label class="form-lbl">Model OpenRouter</label>
-        <select class="form-inp" id="aiModelSelect" onchange="updateModelHint(this.value)">
-          <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3.0324 (paid — khuyến nghị)</option>
-          <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 (paid)</option>
-          <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (FREE — rate limit)</option>
-        </select>
-        <div class="form-hint" id="modelHint" style="color:var(--green)">✓ Chỉ dùng DeepSeek — rẻ và nhanh nhất trên OpenRouter.</div>
-      </div>
-    </div>
-
-    <!-- Fallback Provider Panel -->
-    <div id="settab-fallback-panel" style="display:none">
-      <div class="form-grp">
-        <label class="form-lbl">Fallback provider (khi primary hết limit)</label>
-        <select class="form-inp" id="fallbackProvider" onchange="updateProviderUI('fallback')">
-          <option value="openrouter">🟢 OpenRouter (fallback)</option>
-          <option value="claude-proxy">🟣 Claude via Proxy (fallback)</option>
-          <option value="none">⛔ Không dùng fallback</option>
-        </select>
-      </div>
-      <div id="fallback-or-config" class="form-grp" style="margin-top:12px">
-        <label class="form-lbl">OpenRouter API Key</label>
-        <input class="form-inp" id="apiKeyInputFallback" type="password" placeholder="sk-or-v1-...">
-        <div class="form-hint" style="color:var(--text3)">Tự động dùng key này khi Claude bị rate limit</div>
-      </div>
-      <div id="fallback-or-model" class="form-grp" style="margin-top:10px">
-        <label class="form-lbl">Model OpenRouter (fallback)</label>
-        <select class="form-inp" id="aiModelSelectFallback">
-          <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3.0324 (paid — khuyến nghị)</option>
-          <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 (paid)</option>
-          <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (FREE — rate limit)</option>
-        </select>
-        <div class="form-hint" style="color:var(--text3)">Tự động dùng khi Claude bị rate limit.</div>
-      </div>
-      <div id="fallback-claude-config" style="display:none" class="form-grp" style="margin-top:12px">
-        <label class="form-lbl">Anthropic API Key (fallback)</label>
-        <input class="form-inp" id="claudeKeyFallback" type="password" placeholder="sk-ant-api03-...">
-      </div>
-    </div>
-
-    <!-- Status indicator -->
-    <div id="providerStatus" style="margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:7px;font-size:11.5px;color:var(--text3);line-height:1.8"></div>
-
     <div class="m-footer">
       <button class="btn-cancel" onclick="closeSettings()">Hủy</button>
       <button class="btn-submit" onclick="saveApiKey()">💾 Lưu cài đặt</button>
@@ -802,445 +715,6 @@ let selItems = new Set();
 function getApiKey(){ return localStorage.getItem('genseo_api_key') || ''; }
 
 // ── UNIVERSAL AI CALLER — auto-switch Claude ↔ OpenRouter ──
-let _lastProviderFailed = null;
-
-async function callAIUniversal(messages, maxTokens=2000){
-  const primary = getPrimaryProvider();
-  const fallback = getFallbackProvider();
-
-  // Try primary first
-  try {
-    const result = await _callProvider(primary, messages, maxTokens);
-    _lastProviderFailed = null;
-    return result;
-  } catch(err){
-    const isRateLimit = err.message.includes('429') || err.message.includes('529') || err.message.includes('rate') || err.message.includes('overloaded');
-    const isKeyError = err.message.includes('401') || err.message.includes('key') || err.message.includes('auth');
-    console.warn('Primary provider ('+primary+') failed:', err.message);
-    _lastProviderFailed = primary;
-    // Auto-fallback
-    if(fallback && fallback !== 'none' && fallback !== primary){
-      try {
-        console.log('→ Switching to fallback provider: '+fallback);
-        const result = await _callProvider(fallback==='openrouter'?'fallback-or':fallback, messages, maxTokens);
-        return result;
-      } catch(err2){
-        throw new Error('Cả hai provider đều fail. Primary ('+primary+'): '+err.message+' | Fallback ('+fallback+'): '+err2.message);
-      }
-    }
-    throw err;
-  }
-}
-
-async function _callProvider(provider, messages, maxTokens){
-  // claude-proxy: call via Cloudflare Worker (bypasses CORS)
-  if(provider === 'claude' || provider === 'claude-proxy'){
-    const claudeKey = getClaudeKey();
-    const proxyUrl = getClaudeProxyUrl();
-    if(!claudeKey) throw new Error('Chưa có Anthropic API Key. Vào ⚙ Cài đặt.');
-    if(!proxyUrl) throw new Error('Chưa có Cloudflare Worker URL. Xem hướng dẫn setup trong ⚙.');
-    const endpoint = proxyUrl.replace(/\/$/, '');
-    const r = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        apiKey: claudeKey,
-        model: getClaudeModel(),
-        max_tokens: maxTokens,
-        messages: messages
-      })
-    });
-    if(r.status === 529 || r.status === 429) throw new Error('429 Claude rate limit');
-    if(!r.ok){
-      const e = await r.json().catch(()=>({}));
-      throw new Error(r.status+' Claude proxy error: '+(e.error?.message||r.statusText));
-    }
-    const d = await r.json();
-    return d.content?.[0]?.text || d.choices?.[0]?.message?.content || '';
-  }
-
-  // OpenRouter routes
-  let orKey, model;
-  if(provider === 'fallback-or') {
-    orKey = getFallbackORKey() || getApiKey();
-    if(!orKey) throw new Error('Chưa có Fallback OpenRouter Key.');
-    model = getFallbackORModel();
-  } else { // openrouter (primary)
-    orKey = getApiKey();
-    if(!orKey) throw new Error('Chưa có OpenRouter API Key. Vào ⚙ Cài đặt.');
-    model = getAIModel();
-  }
-
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer '+orKey,
-      'HTTP-Referer': 'https://genseo.app',
-      'X-Title': 'GenSEO'
-    },
-    body: JSON.stringify({ model, max_tokens: maxTokens, messages })
-  });
-  if(r.status === 429) throw new Error('429 rate limit ('+model+')');
-  if(!r.ok){
-    const e = await r.json().catch(()=>({}));
-    throw new Error(r.status+' error ('+model+'): '+(e.error?.message||r.statusText));
-  }
-  const d = await r.json();
-  return d.choices?.[0]?.message?.content || '';
-}
-function savePlans(){ localStorage.setItem('genseo_plans', JSON.stringify(plans)); }
-
-// ── INIT ──
-renderSidebar();
-renderPlanList();
-
-function renderSidebar(){
-  const sp = document.getElementById('sideProjects');
-  const colors = ['#22c55e','#3b82f6','#a855f7','#f97316','#64748b'];
-  sp.outerHTML = plans.slice(-5).reverse().map((p,i) =>
-    `<div class="proj-item" onclick="openPlanById('${p.id}')"><span class="dot" style="background:${colors[i%colors.length]}"></span>${p.name}</div>`
-  ).join('') || `<div class="proj-item"><span class="dot" style="background:#64748b"></span>DEMO</div>`;
-}
-
-function renderPlanList(){
-  updateTopbarCounts();
-  const c = document.getElementById('content');
-  if(plans.length === 0){
-    c.innerHTML = `
-      <div style="padding:20px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-          <h2 style="font-size:17px;font-weight:700">Keyword Plans</h2>
-          <button class="btn-green" onclick="openModal()">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Tạo KW Plan mới
-          </button>
-        </div>
-        <div class="empty">
-          <div class="icon">📋</div>
-          <p style="font-size:14px;font-weight:600;margin-bottom:6px">Chưa có Keyword Plan nào</p>
-          <p>Nhấn "Tạo KW Plan mới" để bắt đầu phân tích từ khóa bằng AI</p>
-          ${!getApiKey()?'<p style="margin-top:10px;color:#f59e0b">⚠ Chưa có OpenRouter API Key — nhấn ⚙ để cài đặt</p>':''}
-        </div>
-      </div>`;
-    return;
-  }
-  const bmap = {pending:['b-pending','Chờ duyệt'],analyzing:['b-analyzing','Đang phân tích'],ready:['b-ready','Sẵn sàng']};
-  const cards = plans.map((p,i) => {
-    const total = p.clusters ? p.clusters.reduce((a,c)=>a+(c.articles?.length||0)+1,0) : 0;
-    const [bc,bt] = bmap[p.status]||bmap.pending;
-    return `
-      <div class="plan-card" onclick="openPlan(${i})">
-        <div>
-          <div class="plan-card-name">${p.name}</div>
-          <div class="plan-card-meta">
-            <span>🔑 ${p.total_kw} keywords</span>
-            <span>📄 ${total} bài</span>
-            <span>📅 ${p.created_at}</span>
-          </div>
-        </div>
-        <span class="badge ${bc}">${bt}</span>
-      </div>`;
-  }).join('');
-  c.innerHTML = `
-    <div style="padding:20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        <h2 style="font-size:17px;font-weight:700">Keyword Plans</h2>
-        <button class="btn-green" onclick="openModal()">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Tạo KW Plan mới
-        </button>
-      </div>
-      ${cards}
-    </div>`;
-}
-
-// ── MODAL ──
-function openModal(){
-  if(!getApiKey() && !getClaudeKey()){ toast('⚠ Chưa có API Key — nhấn ⚙ để cài đặt','err'); openSettings(); return; }
-  document.getElementById('modal').classList.add('show');
-  setTimeout(()=>document.getElementById('fName').focus(),100);
-}
-function closeModal(){ document.getElementById('modal').classList.remove('show'); }
-
-function updKwCnt(){
-  const n = document.getElementById('fKw').value.split(/[\n,]/).map(k=>k.trim()).filter(Boolean).length;
-  document.getElementById('kw-cnt-lbl').textContent = `(${n} keywords)`;
-}
-function selRadio(el,val){
-  document.querySelectorAll('.radio-item').forEach(r=>r.classList.remove('sel'));
-  el.classList.add('sel'); el.querySelector('input').checked=true; selSched=val;
-}
-
-// ── SETTINGS ──
-
-// ── UNIVERSAL AI CALLER — auto-switch Claude ↔ OpenRouter ──
-
-
-async function callAIUniversal(messages, maxTokens=2000){
-  const primary = getPrimaryProvider();
-  const fallback = getFallbackProvider();
-
-  // Try primary first
-  try {
-    const result = await _callProvider(primary, messages, maxTokens);
-    _lastProviderFailed = null;
-    return result;
-  } catch(err){
-    const isRateLimit = err.message.includes('429') || err.message.includes('529') || err.message.includes('rate') || err.message.includes('overloaded');
-    const isKeyError = err.message.includes('401') || err.message.includes('key') || err.message.includes('auth');
-    console.warn('Primary provider ('+primary+') failed:', err.message);
-    _lastProviderFailed = primary;
-    // Auto-fallback
-    if(fallback && fallback !== 'none' && fallback !== primary){
-      try {
-        console.log('→ Switching to fallback provider: '+fallback);
-        const result = await _callProvider(fallback==='openrouter'?'fallback-or':fallback, messages, maxTokens);
-        return result;
-      } catch(err2){
-        throw new Error('Cả hai provider đều fail. Primary ('+primary+'): '+err.message+' | Fallback ('+fallback+'): '+err2.message);
-      }
-    }
-    throw err;
-  }
-}
-
-async function _callProvider(provider, messages, maxTokens){
-  // claude-proxy: call via Cloudflare Worker (bypasses CORS)
-  if(provider === 'claude' || provider === 'claude-proxy'){
-    const claudeKey = getClaudeKey();
-    const proxyUrl = getClaudeProxyUrl();
-    if(!claudeKey) throw new Error('Chưa có Anthropic API Key. Vào ⚙ Cài đặt.');
-    if(!proxyUrl) throw new Error('Chưa có Cloudflare Worker URL. Xem hướng dẫn setup trong ⚙.');
-    const endpoint = proxyUrl.replace(/\/$/, '');
-    const r = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        apiKey: claudeKey,
-        model: getClaudeModel(),
-        max_tokens: maxTokens,
-        messages: messages
-      })
-    });
-    if(r.status === 529 || r.status === 429) throw new Error('429 Claude rate limit');
-    if(!r.ok){
-      const e = await r.json().catch(()=>({}));
-      throw new Error(r.status+' Claude proxy error: '+(e.error?.message||r.statusText));
-    }
-    const d = await r.json();
-    return d.content?.[0]?.text || d.choices?.[0]?.message?.content || '';
-  }
-
-  // OpenRouter routes
-  let orKey, model;
-  if(provider === 'fallback-or') {
-    orKey = getFallbackORKey() || getApiKey();
-    if(!orKey) throw new Error('Chưa có Fallback OpenRouter Key.');
-    model = getFallbackORModel();
-  } else { // openrouter (primary)
-    orKey = getApiKey();
-    if(!orKey) throw new Error('Chưa có OpenRouter API Key. Vào ⚙ Cài đặt.');
-    model = getAIModel();
-  }
-
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer '+orKey,
-      'HTTP-Referer': 'https://genseo.app',
-      'X-Title': 'GenSEO'
-    },
-    body: JSON.stringify({ model, max_tokens: maxTokens, messages })
-  });
-  if(r.status === 429) throw new Error('429 rate limit ('+model+')');
-  if(!r.ok){
-    const e = await r.json().catch(()=>({}));
-    throw new Error(r.status+' error ('+model+'): '+(e.error?.message||r.statusText));
-  }
-  const d = await r.json();
-  return d.choices?.[0]?.message?.content || '';
-}
-function getClaudeKey(){ return localStorage.getItem('genseo_claude_key') || ''; }
-function getAIModel(){ return localStorage.getItem('genseo_ai_model') || 'deepseek/deepseek-chat-v3-0324'; }
-function getClaudeModel(){ return localStorage.getItem('genseo_claude_model') || 'claude-sonnet-4-6'; }
-function getClaudeProxyUrl(){ return localStorage.getItem('genseo_claude_proxy_url') || ''; }
-function getPrimaryProvider(){ return localStorage.getItem('genseo_primary_provider') || 'openrouter'; }
-function getFallbackProvider(){ return localStorage.getItem('genseo_fallback_provider') || 'openrouter'; }
-function getFallbackORKey(){ return localStorage.getItem('genseo_fallback_or_key') || getApiKey(); }
-function getFallbackORModel(){ return localStorage.getItem('genseo_fallback_or_model') || 'deepseek/deepseek-chat-v3-0324'; }
-
-function openSettings(){
-  // Load saved values — normalize legacy values
-  const rawPrimary = getPrimaryProvider();
-  const rawFallback = getFallbackProvider();
-  // Map old 'claude' value to 'claude-proxy'
-  const primary = rawPrimary === 'claude' ? 'claude-proxy' : rawPrimary;
-  const fallback = rawFallback === 'claude' ? 'claude-proxy' : rawFallback;
-  document.getElementById('primaryProvider').value = primary;
-  document.getElementById('fallbackProvider').value = fallback;
-  document.getElementById('claudeKeyInput').value = getClaudeKey();
-  const proxyEl = document.getElementById('claudeProxyUrl');
-  if(proxyEl) proxyEl.value = getClaudeProxyUrl();
-  document.getElementById('claudeModelSelect').value = getClaudeModel();
-  document.getElementById('apiKeyInput').value = getApiKey();
-  document.getElementById('aiModelSelect').value = getAIModel();
-  document.getElementById('apiKeyInputFallback').value = getFallbackORKey();
-  document.getElementById('aiModelSelectFallback').value = getFallbackORModel();
-  updateProviderUI('primary');
-  updateProviderUI('fallback');
-  updateModelHint(getAIModel());
-  updateProviderStatus();
-  document.getElementById('settingsModal').classList.add('show');
-}
-
-function showProviderTab(tab){
-  ['primary','fallback'].forEach(t => {
-    document.getElementById('settab-'+t).style.background = t===tab?'var(--gdim)':'var(--surface2)';
-    document.getElementById('settab-'+t).style.color = t===tab?'var(--green)':'var(--text3)';
-    document.getElementById('settab-'+t).style.fontWeight = t===tab?'600':'400';
-    document.getElementById('settab-'+t+'-panel').style.display = t===tab?'block':'none';
-  });
-}
-
-function updateProviderUI(side){
-  const provider = document.getElementById(side+'Provider').value;
-  const isClaudeProxy = provider==='claude' || provider==='claude-proxy';
-  if(side==='primary'){
-    document.getElementById('primary-claude-config').style.display = isClaudeProxy?'block':'none';
-    document.getElementById('primary-claude-model').style.display = isClaudeProxy?'block':'none';
-    document.getElementById('primary-or-config').style.display = provider==='openrouter'?'block':'none';
-    document.getElementById('primary-or-model').style.display = provider==='openrouter'?'block':'none';
-  } else {
-    document.getElementById('fallback-or-config').style.display = provider==='openrouter'?'block':'none';
-    document.getElementById('fallback-or-model').style.display = provider==='openrouter'?'block':'none';
-    document.getElementById('fallback-claude-config').style.display = isClaudeProxy?'block':'none';
-  }
-  updateProviderStatus();
-}
-
-function updateProviderStatus(){
-  const primary = document.getElementById('primaryProvider')?.value || getPrimaryProvider();
-  const fallback = document.getElementById('fallbackProvider')?.value || getFallbackProvider();
-  const hasClaude = !!(document.getElementById('claudeKeyInput')?.value.trim() || getClaudeKey());
-  const hasOR = !!(document.getElementById('apiKeyInput')?.value.trim() || getApiKey());
-  const el = document.getElementById('providerStatus');
-  if(!el) return;
-  const rows = [];
-  rows.push('① <strong style="color:var(--text2)">Primary:</strong> '
-    +((primary==='claude'||primary==='claude-proxy')
-      ? (getClaudeKey()&&getClaudeProxyUrl()?'🟣 Claude via Worker ✓':'🟣 Claude <span style="color:#f87171">— cần key + Worker URL</span>')
-      : (hasOR?'🟢 OpenRouter (DeepSeek) ✓':'🟢 OpenRouter <span style="color:#f87171">— chưa có key</span>')));
-  if(fallback!=='none'){
-    rows.push('② <strong style="color:var(--text2)">Fallback:</strong> '
-      +(fallback==='openrouter'
-        ? (hasOR?'🟢 OpenRouter ✓ (auto-switch khi primary 429)':'🟢 OpenRouter <span style="color:#f87171">— chưa có key</span>')
-        : (hasClaude?'🟣 Claude API ✓':'🟣 Claude <span style="color:#f87171">— chưa có key</span>')));
-  } else {
-    rows.push('② <strong style="color:var(--text2)">Fallback:</strong> <span style="color:var(--text3)">Tắt</span>');
-  }
-  el.innerHTML = rows.join('<br>');
-}
-
-function updateModelHint(val){
-  const hint = document.getElementById('modelHint');
-  if(!hint) return;
-  if(val && (val.includes(':free') || val === 'openrouter/free')){
-    hint.style.color = '#f59e0b';
-    hint.textContent = '⚠ Free model: rate limit ~20 req/phút.';
-  } else {
-    hint.style.color = 'var(--green)';
-    hint.textContent = '✓ Paid model: dùng credit, không bị rate limit free tier.';
-  }
-}
-
-function closeSettings(){ document.getElementById('settingsModal').classList.remove('show'); }
-
-function showWorkerCode(){
-  const code = `// Cloudflare Worker — CORS proxy cho Anthropic Claude API
-// Deploy tại: https://workers.cloudflare.com → Create Worker → Paste code này → Deploy
-
-export default {
-  async fetch(request, env) {
-    // Handle CORS preflight
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        }
-      });
-    }
-
-    if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
-    }
-
-    const body = await request.json();
-    const { apiKey, model, max_tokens, messages } = body;
-
-    if (!apiKey) return new Response(JSON.stringify({ error: { message: 'Missing apiKey' } }), { status: 400 });
-
-    const anthropicResp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({ model, max_tokens, messages }),
-    });
-
-    const data = await anthropicResp.json();
-    return new Response(JSON.stringify(data), {
-      status: anthropicResp.status,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      }
-    });
-  }
-};`;
-
-  // Show in a modal or copy to clipboard
-  const blob = new Blob([code], {type:'text/plain'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'claude-worker.js'; a.click();
-  URL.revokeObjectURL(url);
-  toast('✓ Đã download claude-worker.js — Upload lên Cloudflare Workers', 'ok');
-}
-
-function saveApiKey(){
-  const primary = document.getElementById('primaryProvider').value;
-  const fallback = document.getElementById('fallbackProvider').value;
-  // Save all keys
-  const claudeKey = document.getElementById('claudeKeyInput').value.trim();
-  const orKey = document.getElementById('apiKeyInput').value.trim();
-  const fallbackOrKey = document.getElementById('apiKeyInputFallback').value.trim();
-  const claudeModel = document.getElementById('claudeModelSelect').value;
-  const orModel = document.getElementById('aiModelSelect').value;
-  const fallbackOrModel = document.getElementById('aiModelSelectFallback').value;
-  // Validate primary
-  if(primary==='claude' && !claudeKey){ toast('Nhập Anthropic API Key','err'); return; }
-  if(primary==='openrouter' && !orKey){ toast('Nhập OpenRouter API Key','err'); return; }
-  // Save
-  if(claudeKey) localStorage.setItem('genseo_claude_key', claudeKey);
-  const proxyUrl = document.getElementById('claudeProxyUrl')?.value.trim();
-  if(proxyUrl) localStorage.setItem('genseo_claude_proxy_url', proxyUrl);
-  if(orKey) localStorage.setItem('genseo_api_key', orKey);
-  if(fallbackOrKey) localStorage.setItem('genseo_fallback_or_key', fallbackOrKey);
-  localStorage.setItem('genseo_primary_provider', primary);
-  localStorage.setItem('genseo_fallback_provider', fallback);
-  localStorage.setItem('genseo_claude_model', claudeModel);
-  localStorage.setItem('genseo_ai_model', orModel);
-  localStorage.setItem('genseo_fallback_or_model', fallbackOrModel);
-  closeSettings();
-  toast('Đã lưu cài đặt ✓ — Primary: '+(primary==='claude'?'Claude':'OpenRouter')+', Fallback: '+fallback,'ok');
-}
-
 // ── CREATE PLAN ──
 async function createPlan(){
   const name = document.getElementById('fName').value.trim();
@@ -3409,7 +2883,7 @@ function clearCPData(){ cpData = null; cpLogs = []; localStorage.removeItem('gen
 async function runContentPlan(){
   if(cpRunning) return;
   const apiKey = getApiKey();
-  if(!apiKey){ toast('Cần OpenRouter API Key','err'); openSettings(); return; }
+  if(!apiKey){ toast('Cần OpenRouter API Key — vào ⚙ Cài đặt','err'); openSettings(); return; }
   const input = document.getElementById('cpSitemapUrl')?.value.trim();
   if(!input){ toast('Nhập URL sitemap hoặc danh sách URL','err'); return; }
   const lang = document.getElementById('cpLang')?.value || 'en';
@@ -3554,7 +3028,10 @@ async function runContentPlan(){
     addLog('✅ Phân tích xong! '+allClusters.length+' topic clusters, '+allGaps.length+' content gaps');
     await new Promise(r=>setTimeout(r,800));
 
-    document.getElementById('cpBody').innerHTML = renderCPResults();
+    // Force re-render even if clusters = 0 (show gaps/orphans anyway)
+    document.getElementById('cpBody').innerHTML = (allClusters.length||allGaps.length||allOrphans.length)
+      ? renderCPResults()
+      : '<div style="padding:20px;color:var(--text3);font-size:12px">AI không phân tích được cluster nào. Kiểm tra log ở trên xem lỗi gì.</div>';
 
   } catch(e){
     document.getElementById('cpBody').innerHTML = '<div style="padding:20px 24px"><div style="background:#7f1d1d22;border:1px solid #f8717133;border-radius:8px;padding:14px;font-size:13px;color:#f87171">✗ '+e.message+'</div></div>';
@@ -3828,4 +3305,61 @@ updateILCount();
 
 </script>
 </body>
-</html>
+</html// ── SETTINGS ──
+function getApiKey(){ return localStorage.getItem('genseo_api_key') || ''; }
+function getClaudeKey(){ return ''; } // deprecated
+function getClaudeModel(){ return 'claude-sonnet-4-6'; } // deprecated
+function getClaudeProxyUrl(){ return ''; } // deprecated
+function getPrimaryProvider(){ return 'openrouter'; }
+function getFallbackProvider(){ return 'none'; }
+function getFallbackORKey(){ return getApiKey(); }
+function getFallbackORModel(){ return getAIModel(); }
+function getAIModel(){ return localStorage.getItem('genseo_ai_model') || 'deepseek/deepseek-chat-v3-0324'; }
+
+function openSettings(){
+  document.getElementById('apiKeyInput').value = getApiKey();
+  const sel = document.getElementById('aiModelSelect');
+  if(sel){ sel.value = getAIModel(); updateModelHint(sel.value); }
+  document.getElementById('settingsModal').classList.add('show');
+}
+function closeSettings(){ document.getElementById('settingsModal').classList.remove('show'); }
+function updateModelHint(val){
+  const hint = document.getElementById('modelHint');
+  if(!hint) return;
+  if(val && val.includes(':free')){
+    hint.style.color = '#f59e0b';
+    hint.textContent = '⚠ Free model: rate limit ~20 req/phút, dễ bị 429 khi dùng nhiều.';
+  } else {
+    hint.style.color = 'var(--green)';
+    hint.textContent = '✓ Paid model: dùng credit OpenRouter, không bị rate limit.';
+  }
+}
+function saveApiKey(){
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if(!k){ toast('Nhập OpenRouter API Key','err'); return; }
+  localStorage.setItem('genseo_api_key', k);
+  const model = document.getElementById('aiModelSelect')?.value;
+  if(model) localStorage.setItem('genseo_ai_model', model);
+  closeSettings();
+  toast('Đã lưu cài đặt ✓','ok');
+}
+// ── UNIVERSAL AI CALL (OpenRouter only, simple) ──
+let _lastProviderFailed = null;
+async function callAIUniversal(messages, maxTokens=2000){
+  const key = getApiKey();
+  if(!key) throw new Error('Chưa có OpenRouter API Key. Vào ⚙ để cài đặt.');
+  const model = getAIModel();
+  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+key,
+      'HTTP-Referer':'https://genseo.app', 'X-Title':'GenSEO' },
+    body: JSON.stringify({ model, max_tokens: maxTokens, messages })
+  });
+  if(r.status === 429) throw new Error('429 rate limit — thử lại sau ít phút hoặc đổi sang paid model');
+  if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(r.status+': '+(e.error?.message||r.statusText)); }
+  const d = await r.json();
+  return d.choices?.[0]?.message?.content || '';
+}
+async function _callProvider(provider, messages, maxTokens){ return callAIUniversal(messages, maxTokens); }
+
+>
