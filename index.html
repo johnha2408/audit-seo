@@ -3264,42 +3264,62 @@ function showCPTab(tabId){
 
 function renderCPArchTab(clusters, gapsByTopic, healthIcon, healthColor){
   if(!clusters.length) return '<div style="padding:24px;color:var(--text3);font-size:12px">Chưa có dữ liệu</div>';
+
+  // Tính tổng số bài đã được phân loại
+  const totalClassified = clusters.reduce((a,c)=>a+1+(c.clusters||[]).length, 0);
+  const totalScanned = cpData?.urls?.length || 0;
+  const orphanCount = cpData?.orphans?.length || 0;
+  const unclassified = totalScanned - totalClassified - orphanCount;
+
   return '<div style="padding:16px">'
+    // Coverage summary bar
+    +'<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:14px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px">'
+    +'<span>📊 Tổng quét: <strong style="color:var(--text)">'+totalScanned+'</strong> URLs</span>'
+    +'<span>✅ Đã phân loại: <strong style="color:var(--green)">'+totalClassified+'</strong> bài ('+Math.round(totalClassified/totalScanned*100)+'%)</span>'
+    +'<span>🔗 Orphan: <strong style="color:#f59e0b">'+orphanCount+'</strong></span>'
+    +(unclassified>0?'<span style="color:#f87171">⚠ Chưa phân loại: <strong>'+unclassified+'</strong> bài</span>':'')
+    +'</div>'
     +clusters.map((c,ci)=>{
       const gaps = gapsByTopic[c.topic]||[];
-      const clusterRows = (c.clusters||[]).map(p=>`
+      let rowNum = 0; // số thứ tự bài trong cluster
+      const clusterRows = (c.clusters||[]).map((p,pi)=>{
+        rowNum++;
+        return `
         <div class="cp-post-row">
+          <span style="font-size:10px;color:var(--text3);min-width:22px;text-align:right;font-family:monospace">${rowNum}</span>
           <span class="cp-role-pill cp-role-cluster">CLUSTER</span>
-          <div style="overflow:hidden">
+          <div style="overflow:hidden;flex:1">
             <div style="font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.title||p.url.split('/').filter(Boolean).pop()||p.url}</div>
             <div style="font-size:10.5px;color:var(--text3)">${p.url.replace(/^https?:\/\/[^\/]+/,'')}</div>
           </div>
           <a href="${p.url}" target="_blank" style="color:var(--text3);font-size:10.5px">🔗</a>
-          <div style="font-size:10px;color:var(--text3)">CLUSTER</div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
 
       const gapPills = gaps.map(g=>`<span style="font-size:10px;background:${g.priority==='high'?'#7f1d1d22':'#78350f22'};color:${g.priority==='high'?'#f87171':'#f59e0b'};border:1px solid ${g.priority==='high'?'#f8717133':'#f59e0b33'};border-radius:4px;padding:2px 6px;margin-right:4px">${g.type||'gap'}</span>`).join('');
 
+      const totalInCluster = 1 + (c.clusters||[]).length; // pillar + clusters
+
       return `<div class="cp-cluster">
         <div class="cp-cluster-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <span style="font-size:11px;color:var(--text3);font-weight:600;min-width:24px">#${ci+1}</span>
           <div class="cp-cluster-title">${c.topic}</div>
           <div class="cp-cluster-meta">
             ${(c.tags||[]).map(t=>`<span class="cp-cluster-badge">#${t}</span>`).join('')}
             ${gaps.length?`<span class="cp-gap-badge">⚠ ${gaps.length} gaps</span>`:''}
-            <span style="font-size:11px;color:${healthColor(c.health)}">${healthIcon(c.health)} ${c.clusters?.length||0} clusters</span>
+            <span style="font-size:11px;color:${healthColor(c.health)}">${healthIcon(c.health)} ${totalInCluster} bài</span>
             <span style="font-size:12px;color:var(--text3)">▾</span>
           </div>
         </div>
         <div class="cp-cluster-body">
-          <!-- Pillar -->
           <div class="cp-post-row" style="background:var(--gdim);border-radius:4px;padding:8px 8px;margin-bottom:4px">
+            <span style="font-size:10px;color:var(--green);min-width:22px;text-align:right;font-family:monospace;font-weight:700">P</span>
             <span class="cp-role-pill cp-role-pillar">PILLAR</span>
-            <div style="overflow:hidden">
+            <div style="overflow:hidden;flex:1">
               <div style="font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.pillar_title||c.topic}</div>
               <div style="font-size:10.5px;color:var(--text3)">${(c.pillar_url||'').replace(/^https?:\/\/[^\/]+/,'')}</div>
             </div>
             <a href="${c.pillar_url||'#'}" target="_blank" style="color:var(--text3);font-size:10.5px">🔗</a>
-            <div></div>
           </div>
           ${clusterRows}
           ${gaps.length?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><div style="font-size:10.5px;font-weight:600;color:var(--text3);margin-bottom:4px">CONTENT GAPS:</div>${gapPills}</div>`:''}
@@ -3312,8 +3332,14 @@ function renderCPArchTab(clusters, gapsByTopic, healthIcon, healthColor){
 function renderCPGapsTab(gaps, priorityColor){
   if(!gaps.length) return '<div style="padding:24px;color:var(--green);font-size:12px">✅ Không phát hiện content gap!</div>';
   const sorted = [...gaps].sort((a,b)=>({high:0,medium:1,low:2}[a.priority]||1)-({high:0,medium:1,low:2}[b.priority]||1));
+  const competitorGaps = cpData?._competitorGaps || [];
   return '<div style="padding:16px">'
-    +'<div style="font-size:12px;color:var(--text3);margin-bottom:14px">'+gaps.length+' content gaps — sắp xếp theo độ ưu tiên</div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<span style="font-size:12px;color:var(--text3)">'+gaps.length+' gaps từ phân tích AI</span>'
+    +'<button class="btn-outline" id="compGapBtn" onclick="searchCompetitorGaps()" style="font-size:11px;display:flex;align-items:center;gap:5px">'
+    +'🔍 Tìm gaps từ đối thủ (web search)</button>'
+    +(competitorGaps.length?'<span style="font-size:11px;color:var(--green)">+ '+competitorGaps.length+' competitor gaps</span>':'')
+    +'</div>'
     +sorted.map(g=>`
       <div class="cp-gap-item cp-gap-${g.priority||'medium'}">
         <div style="min-width:80px;text-align:center">
@@ -3338,6 +3364,30 @@ function renderCPGapsTab(gaps, priorityColor){
           + Tạo bài
         </button>
       </div>`).join('')
+    // Competitor gaps section
+    +(competitorGaps.length ? 
+      '<div style="margin-top:20px;border-top:2px solid #60a5fa33;padding-top:14px">'
+      +'<div style="font-size:13px;font-weight:600;color:#60a5fa;margin-bottom:12px">🔍 Gaps từ đối thủ (web research)</div>'
+      +competitorGaps.map(g=>`
+        <div class="cp-gap-item cp-gap-${g.priority||'medium'}" style="border-color:#60a5fa33">
+          <div style="min-width:80px;text-align:center">
+            <div style="font-size:18px">${g.priority==='high'?'🔴':g.priority==='low'?'🟢':'🟡'}</div>
+            <div style="font-size:9px;font-weight:700;color:#60a5fa;text-transform:uppercase">COMPETITOR</div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:12.5px;font-weight:600">${g.title}</div>
+            <div style="font-size:10.5px;color:var(--text3);font-family:monospace;margin-top:3px">🔑 ${g.keyword||''}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap">
+              <span>📁 ${g.topic||''}</span>
+              ${g.competitor?`<span>🌐 Competitor: <strong style="color:#60a5fa">${g.competitor}</strong></span>`:''}
+              ${g.slug?`<span style="font-family:monospace">🔗 ${g.slug}</span>`:''}
+            </div>
+          </div>
+          <button class="btn-outline" style="font-size:10.5px;white-space:nowrap;align-self:flex-start"
+            onclick="createFromGap(${JSON.stringify(g).replace(/"/g,'&quot;')})">+ Tạo bài</button>
+        </div>`).join('')
+      +'</div>'
+    : '<div id="compGapResult"></div>')
     +'</div>';
 }
 
@@ -3378,6 +3428,65 @@ function renderCPOrphansTab(orphans){
         +'<td style="color:var(--text3);font-size:11px">Cần thêm internal links hoặc gộp vào cluster phù hợp</td></tr>';
     }).join('')
     +'</tbody></table></div>';
+}
+
+async function searchCompetitorGaps(){
+  const apiKey = getApiKey();
+  if(!apiKey){ toast('Cần OpenRouter API Key','err'); return; }
+  if(!cpData){ toast('Cần chạy Content Plan trước','err'); return; }
+
+  const btn = document.getElementById('compGapBtn');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Đang tìm...'; }
+
+  const domain = cpData.domain;
+  const existingUrls = new Set((cpData.urls||[]).map(u=>u.replace(/^https?:\/\/[^\/]+/,'').toLowerCase()));
+
+  // Lấy tất cả topics đã có
+  const topics = (cpData.clusters||[]).map(c=>c.topic).join(', ');
+
+  try {
+    const prompt = 'You are an SEO content researcher. Find content gaps by analyzing competitor coverage.\n\n'
+      +'Website: '+domain+'\n'
+      +'Existing topics: '+topics+'\n'
+      +'Language: '+(cpData.lang||'en')+'\n\n'
+      +'Search the web and find:\n'
+      +'1. Top 3-5 competitor websites in the same niche (e.g. video production Calgary)\n'
+      +'2. What content THEY have that '+domain+' does NOT have\n'
+      +'3. Popular topics/keywords competitors rank for but this site is missing\n\n'
+      +'IMPORTANT: Only suggest articles NOT similar to existing URLs:\n'
+      +Array.from(existingUrls).slice(0,30).join('\n')+'\n\n'
+      +'Return ONLY JSON array (no markdown):\n'
+      +'[{"title":"Article Title","keyword":"primary keyword","slug":"/blog/slug/","topic":"topic cluster",'
+      +'"priority":"high|medium|low","competitor":"competitor-domain.com","rationale":"why this gap matters"}]\n'
+      +'Return 10-15 gaps minimum. Be specific and actionable.';
+
+    const txt = await callAIUniversal(
+      [{role:'user',content:prompt}],
+      3000
+    );
+    const clean = txt.replace(/```json|```/g,'').trim();
+    const jsonM = clean.match(/\[[\s\S]*\]/);
+    if(jsonM){
+      const gaps = JSON.parse(jsonM[0]);
+      // Filter ra các gaps không trùng với bài hiện có
+      const newGaps = gaps.filter(g => {
+        const gSlug = (g.slug||'').toLowerCase().replace(/\/$/, '');
+        return !Array.from(existingUrls).some(u => {
+          const uSlug = u.replace(/\/$/, '');
+          return uSlug === gSlug || uSlug.includes(gSlug.replace('/blog/','')||'NOMATCH');
+        });
+      });
+      cpData._competitorGaps = newGaps;
+      localStorage.setItem('genseo_cp', JSON.stringify(cpData));
+      toast('✓ Tìm thấy '+newGaps.length+' competitor gaps mới!','ok');
+      showCPTab('cp-gaps');
+    } else {
+      toast('Không parse được kết quả. Thử lại.','err');
+    }
+  } catch(e){
+    toast('Lỗi: '+e.message,'err');
+  }
+  if(btn){ btn.disabled=false; btn.innerHTML='🔍 Tìm gaps từ đối thủ (web search)'; }
 }
 
 function createFromGap(gap){
