@@ -3970,6 +3970,32 @@ async function startResearch(){
   await runResearch(0);
 }
 
+// Safe JSON parser — repairs trailing commas, truncated JSON
+function safeParseJSON(txt, fallback){
+  try {
+    const clean = txt.replace(/```json|```/g,'').trim();
+    // Try direct parse first
+    const m = clean.match(/\{[\s\S]*\}/);
+    if(!m) return fallback;
+    let str = m[0];
+    // Repair common issues: trailing commas, truncated arrays
+    str = str.replace(/,\s*([}\]])/g, '$1'); // remove trailing commas
+    str = str.replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3'); // unquoted keys
+    try { return JSON.parse(str); } catch(e2) {
+      // If still invalid (likely truncated), try to close open brackets
+      let opens = (str.match(/\{/g)||[]).length - (str.match(/\}/g)||[]).length;
+      let arrOpens = (str.match(/\[/g)||[]).length - (str.match(/\]/g)||[]).length;
+      // Remove incomplete last entry
+      str = str.replace(/,\s*\{[^}]*$/, '').replace(/,\s*"[^"]*$/, '');
+      str = str.replace(/,\s*\[[^\]]*$/, '');
+      while(arrOpens-- > 0) str += ']';
+      while(opens-- > 0) str += '}';
+      str = str.replace(/,\s*([}\]])/g, '$1');
+      try { return JSON.parse(str); } catch(e3) { return fallback; }
+    }
+  } catch(e){ return fallback; }
+}
+
 async function runResearch(idx){
   const r = researchData[idx];
   if(!r) return;
@@ -4009,7 +4035,7 @@ Return ONLY JSON:
 }`;
 
     const r1 = await callAIUniversal([{role:'user',content:phase1}], 3000);
-    const j1 = JSON.parse((r1.replace(/```json|```/g,'').trim().match(/\{[\s\S]*\}/)||['{}'])[0]);
+    const j1 = safeParseJSON(r1, {keyword_clusters:[], content_gaps:[], local_opportunities:[], quick_wins:[]});
     r.serpInsights = j1.serp_overview||'';
     r.keywordClusters = j1.keyword_clusters||[];
     r.contentGaps = j1.content_gaps||[];
@@ -4024,70 +4050,21 @@ Return ONLY JSON:
 
     const clusterList = j1.keyword_clusters.map(k=>`- ${k.cluster}: ${k.head_keyword} (${k.intent}, ${k.competition} competition)`).join('\n');
 
-    const phase2 = `You are building a 3-TIER PYRAMID content strategy.
+    const phase2 = 'You are an SEO content architect. Build a 3-tier Pyramid content plan.\n\n'
+      +'TOPIC: "'+r.topic+'" | LOCATION: '+r.location+' | LANG: '+r.lang+'\n'
+      +'KEYWORD CLUSTERS: '+clusterList+'\n'
+      +'GAPS: '+(j1.content_gaps||[]).join(', ')+'\n\n'
+      +'3-TIER PYRAMID RULES:\n'
+      +'Tier 1=PILLAR: 1 broad ultimate guide (3500-4500w)\n'
+      +'Tier 2=CLUSTER: 4-6 articles per cluster, medium-tail keywords (1500-2500w)\n'
+      +'Tier 3=SUB-CLUSTER: 3-4 per cluster article, ultra-specific long-tail (800-1200w) - THIS IS WHERE YOU WIN TRAFFIC\n\n'
+      +'IMPORTANT: Generate COMPLETE JSON. For each cluster article, include 3-4 sub_clusters. Include local variants for '+r.location+'.\n\n'
+      +'Return ONLY valid JSON (no trailing commas, no markdown):\n'
+      +'{"pillar":{"title":"T","keyword":"k","slug":"/s/","wordcount":4000,"intent":"informational","schema":"Article","description":"d"},'
+      +'"clusters":[{"name":"N","articles":[{"title":"T","keyword":"k","slug":"/blog/s/","wordcount":2000,"intent":"informational|commercial|local","schema":"Article|HowTo|FAQPage","notes":"n","sub_clusters":[{"title":"T","keyword":"k","slug":"/blog/s/","wordcount":1000,"intent":"informational","schema":"FAQPage","notes":"why long-tail wins"}]}]}]}';
 
-TOPIC: "${r.topic}" | LOCATION: ${r.location} | LANGUAGE: ${r.lang}
-
-KEYWORD CLUSTERS IDENTIFIED:
-${clusterList}
-
-CONTENT GAPS: ${(j1.content_gaps||[]).join(', ')}
-LOCAL OPPORTUNITIES: ${(j1.local_opportunities||[]).join(', ')}
-
-BUILD THE 3-TIER PYRAMID:
-
-TIER 1 — PILLAR (1 article, very broad):
-- Ultimate Guide covering the entire topic at high level
-- Target: broad head keyword
-- 3500-4500 words
-- Links down to ALL cluster articles
-
-TIER 2 — CLUSTERS (one per keyword cluster, 5-8 articles each):
-- Each cluster article covers ONE specific aspect deeply
-- Target: medium-tail keywords
-- 1500-2500 words
-- Links to sub-clusters below, links up to pillar
-
-TIER 3 — SUB-CLUSTERS (3-5 per cluster article):
-- Ultra-specific, long-tail, question-based
-- These WIN the most organic traffic (low competition, high intent)
-- 800-1500 words
-- "Can you install X in winter?", "How much does X cost in [city]?", etc.
-
-RULES:
-- Tier 3 is where you WIN traffic — generate MORE sub-clusters, not less
-- Each article needs: title, keyword, slug, wordcount, intent, schema, priority, notes
-- Include LOCAL variants for ${r.location} throughout
-- Mix intent: informational + commercial + local
-- Never repeat keywords between articles
-
-Return ONLY JSON:
-{
-  "pillar": {
-    "title": "...", "keyword": "...", "slug": "/...", "wordcount": 4000,
-    "intent": "informational", "schema": "Article", "description": "..."
-  },
-  "clusters": [
-    {
-      "name": "Cluster Name",
-      "head_keyword": "...",
-      "articles": [
-        {
-          "title": "...", "keyword": "...", "slug": "/blog/...", "wordcount": 2000,
-          "intent": "informational|commercial|local", "schema": "Article|HowTo|FAQPage",
-          "priority": "high|medium|low", "notes": "...",
-          "sub_clusters": [
-            {"title": "...", "keyword": "...", "slug": "/blog/...", "wordcount": 1000,
-             "intent": "...", "schema": "FAQPage|HowTo", "notes": "why this long-tail wins traffic"}
-          ]
-        }
-      ]
-    }
-  ]
-}`;
-
-    const r2 = await callAIUniversal([{role:'user',content:phase2}], 4000);
-    const j2 = JSON.parse((r2.replace(/```json|```/g,'').trim().match(/\{[\s\S]*\}/)||['{}'])[0]);
+        const r2 = await callAIUniversal([{role:'user',content:phase2}], 4000);
+    const j2 = safeParseJSON(r2, {pillar:null, clusters:[]});
     r.pillar = j2.pillar||null;
     r.clusters = j2.clusters||[];
     r.status = 'done';
