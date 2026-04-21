@@ -4050,18 +4050,31 @@ Return ONLY JSON:
 
     const clusterList = j1.keyword_clusters.map(k=>`- ${k.cluster}: ${k.head_keyword} (${k.intent}, ${k.competition} competition)`).join('\n');
 
-    const phase2 = 'You are an SEO content architect. Build a 3-tier Pyramid content plan.\n\n'
-      +'TOPIC: "'+r.topic+'" | LOCATION: '+r.location+' | LANG: '+r.lang+'\n'
-      +'KEYWORD CLUSTERS: '+clusterList+'\n'
-      +'GAPS: '+(j1.content_gaps||[]).join(', ')+'\n\n'
-      +'3-TIER PYRAMID RULES:\n'
-      +'Tier 1=PILLAR: 1 broad ultimate guide (3500-4500w)\n'
-      +'Tier 2=CLUSTER: 4-6 articles per cluster, medium-tail keywords (1500-2500w)\n'
-      +'Tier 3=SUB-CLUSTER: 3-4 per cluster article, ultra-specific long-tail (800-1200w) - THIS IS WHERE YOU WIN TRAFFIC\n\n'
-      +'IMPORTANT: Generate COMPLETE JSON. For each cluster article, include 3-4 sub_clusters. Include local variants for '+r.location+'.\n\n'
-      +'Return ONLY valid JSON (no trailing commas, no markdown):\n'
+    const phase2 = 'SEO content architect. Build 3-tier Pyramid for: "'+r.topic+'" in '+r.location+' ('+r.lang+')\n\n'
+      +'KEYWORD CLUSTERS TO COVER:\n'+clusterList+'\n'
+      +'CONTENT GAPS TO FILL: '+(j1.content_gaps||[]).join(', ')+'\n'
+      +'LOCAL OPPORTUNITIES: '+(j1.local_opportunities||[]).join(', ')+'\n\n'
+      +'REQUIREMENTS:\n'
+      +'- Tier 1 PILLAR: 1 article, ultimate guide, 3500-4500w, broad keyword\n'
+      +'- Tier 2 CLUSTER: MINIMUM 5 articles per cluster (aim 6-7), 1500-2500w, medium-tail\n'
+      +'  Mix: 2-3 informational + 2 commercial + 1-2 local GEO ('+r.location+' specific)\n'
+      +'- Tier 3 SUB-CLUSTER: MINIMUM 3 per cluster article (aim 4), 800-1200w, long-tail questions\n'
+      +'  Examples: "How much does X cost in Calgary?", "Can you do X in winter?", "Best X near me"\n'
+      +'  These win traffic because: low competition, high intent, answer-specific questions\n\n'
+      +'IMPORTANT RULES:\n'
+      +'- Never repeat keywords across articles\n'
+      +'- Each article title must be unique and specific\n'
+      +'- notes field = WHY this article helps SEO (1 sentence)\n'
+      +'- slugs must be URL-friendly, lowercase, hyphens\n\n'
+      +'Return ONLY valid JSON (NO trailing commas, NO markdown, NO comments):\n'
       +'{"pillar":{"title":"T","keyword":"k","slug":"/s/","wordcount":4000,"intent":"informational","schema":"Article","description":"d"},'
-      +'"clusters":[{"name":"N","articles":[{"title":"T","keyword":"k","slug":"/blog/s/","wordcount":2000,"intent":"informational|commercial|local","schema":"Article|HowTo|FAQPage","notes":"n","sub_clusters":[{"title":"T","keyword":"k","slug":"/blog/s/","wordcount":1000,"intent":"informational","schema":"FAQPage","notes":"why long-tail wins"}]}]}]}';
+      +'"clusters":[{"name":"Cluster Name","articles":['
+      +'{"title":"T","keyword":"k","slug":"/blog/s/","wordcount":2000,"intent":"informational","schema":"Article","notes":"n","sub_clusters":['
+      +'{"title":"T","keyword":"k","slug":"/blog/s/","wordcount":1000,"intent":"informational","schema":"FAQPage","notes":"n"},'
+      +'{"title":"T","keyword":"k","slug":"/blog/s/","wordcount":900,"intent":"local","schema":"HowTo","notes":"n"},'
+      +'{"title":"T","keyword":"k","slug":"/blog/s/","wordcount":1000,"intent":"commercial","schema":"FAQPage","notes":"n"}'
+      +']}'
+      +']}]}';
 
         const r2 = await callAIUniversal([{role:'user',content:phase2}], 4000);
     const j2 = safeParseJSON(r2, {pillar:null, clusters:[]});
@@ -4225,7 +4238,7 @@ function buildClusterBlock(cl, ci, resIdx, qKeys){
       </td>
       <td style="padding:8px 8px;font-size:10.5px;font-family:monospace;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.slug}</td>
       <td style="padding:8px 8px;text-align:right;white-space:nowrap">
-        <button onclick="addToQueue(${safe})" style="background:${inQ?'var(--gdim)':'var(--green)'};color:${inQ?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:4px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${inQ?'✓':'+ T2'}</button>
+        <button onclick="addToQueue(${safe})" style="background:${inQ?'var(--gdim)':'var(--green)'};color:${inQ?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:4px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${inQ?'✓':'+ Thêm'}</button>
       </td>
     </tr>${subRows}`;
   }).join('');
