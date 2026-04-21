@@ -478,7 +478,7 @@ input[type=checkbox]{width:13px;height:13px;accent-color:var(--green);cursor:poi
       <div class="t-tab active" id="tab-kwplan" onclick="showView('plans')">Keyword Plan <span class="t-cnt g" id="tb-plan-cnt">0</span></div>
       <div class="t-tab" id="tab-articles" onclick="showView('articles')">Bài viết <span class="t-cnt" id="tb-queue-cnt">0</span></div>
       <div class="t-tab" id="tab-il" onclick="showView('il')">Liên kết nội bộ <span class="t-cnt" id="tb-il-cnt">0</span></div>
-      <div class="t-tab">Knowledge Base</div>
+      <div class="t-tab" id="tab-research" onclick="showView('research')">Research <span class="t-cnt" id="tb-research-cnt">0</span></div>
       <div class="t-tab" id="tab-seo-opt" onclick="showView('seo')">SEO Optimizer</div>
     </div>
     <div class="topbar-actions">
@@ -1234,6 +1234,9 @@ function showView(view){
   } else if(view==='articles'){
     document.getElementById('tab-articles').classList.add('active');
     renderArticleQueuePage();
+  } else if(view==='research'){
+    document.getElementById('tab-research').classList.add('active');
+    renderResearchPage();
   }
 }
 
@@ -3882,6 +3885,375 @@ function createFromGap(gap){
 const _savedCP = localStorage.getItem('genseo_cp');
 if(_savedCP){ try{ cpData = JSON.parse(_savedCP); const cnt=document.getElementById('tb-cp-cnt'); if(cnt) cnt.textContent=cpData.clusters?.length||0; }catch(e){} }
 
+// ── RESEARCH FEATURE ─────────────────────────────────────
+let researchData = JSON.parse(localStorage.getItem('genseo_research') || '[]');
+// researchData = [{id, topic, lang, status, clusters, createdAt}]
+
+function saveResearchData(){ localStorage.setItem('genseo_research', JSON.stringify(researchData)); updateResearchCount(); }
+function updateResearchCount(){
+  const el = document.getElementById('tb-research-cnt');
+  if(el) el.textContent = researchData.length || '';
+}
+
+function renderResearchPage(){
+  updateResearchCount();
+  const c = document.getElementById('content');
+  c.innerHTML = `
+  <div style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:17px;font-weight:700">Research</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Nhập topic → AI research top Google → generate cụm bài viết Pillar-Cluster chuẩn SEO/GEO</div>
+      </div>
+      <button class="btn-green" onclick="openResearchModal()">+ New Research</button>
+    </div>
+    ${researchData.length === 0 ? renderResearchEmpty() : renderResearchList()}
+  </div>`;
+}
+
+function renderResearchEmpty(){
+  return `
+  <div style="text-align:center;padding:48px 24px">
+    <div style="font-size:40px;margin-bottom:12px">🔬</div>
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">Chưa có research nào</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:20px">Nhập topic → AI phân tích top 20 Google → generate Pillar-Cluster plan</div>
+    <button class="btn-green" onclick="openResearchModal()">+ Bắt đầu research</button>
+  </div>`;
+}
+
+function renderResearchList(){
+  return researchData.map((r,i) => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:12px">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+            <div style="font-size:15px;font-weight:600">${r.topic}</div>
+            <span style="font-size:10px;background:${r.status==='done'?'var(--gdim)':r.status==='running'?'#1e3a5f':'var(--surface2)'};color:${r.status==='done'?'var(--green)':r.status==='running'?'#60a5fa':'var(--text3)'};border:1px solid ${r.status==='done'?'var(--gborder)':r.status==='running'?'#60a5fa44':'var(--border)'};border-radius:4px;padding:2px 7px;font-weight:600">
+              ${r.status==='done'?'✓ Done':r.status==='running'?'⏳ Đang research':'Draft'}
+            </span>
+          </div>
+          <div style="font-size:11px;color:var(--text3)">📅 ${r.createdAt} · ${r.clusters?.length||0} clusters · ${r.clusters?.reduce((a,c)=>a+(c.articles||[]).length,0)||0} articles</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn-outline" onclick="viewResearch(${i})" style="font-size:11px">Xem</button>
+          <button class="btn-outline" onclick="deleteResearch(${i})" style="font-size:11px;color:#f87171">✕</button>
+        </div>
+      </div>
+      ${r.status==='done' && r.clusters?.length ? renderResearchPreview(r) : ''}
+    </div>`).join('');
+}
+
+function renderResearchPreview(r){
+  return `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+    ${r.clusters.slice(0,5).map(c=>`<span style="font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 9px;color:var(--text2)">${c.name} <span style="color:var(--text3)">(${(c.articles||[]).length})</span></span>`).join('')}
+    ${r.clusters.length>5?`<span style="font-size:11px;color:var(--text3)">+${r.clusters.length-5} more</span>`:''}
+  </div>`;
+}
+
+// ── MODAL ──
+function openResearchModal(){
+  document.getElementById('researchModal').classList.add('show');
+  setTimeout(()=>document.getElementById('researchTopicInput').focus(),100);
+}
+function closeResearchModal(){ document.getElementById('researchModal').classList.remove('show'); }
+
+async function startResearch(){
+  const topic = document.getElementById('researchTopicInput').value.trim();
+  const lang = document.getElementById('researchLang').value;
+  const location = document.getElementById('researchLocation').value.trim() || 'Canada';
+  if(!topic){ toast('Nhập topic cần research','err'); return; }
+  if(!getApiKey()){ toast('Cần OpenRouter API Key','err'); openSettings(); return; }
+
+  closeResearchModal();
+
+  const id = Date.now();
+  const item = { id, topic, lang, location, status:'running', clusters:[], gaps:[], createdAt: new Date().toLocaleDateString('vi-VN') };
+  researchData.unshift(item);
+  saveResearchData();
+  renderResearchPage();
+
+  // Immediately show progress view
+  viewResearch(0);
+  await runResearch(0);
+}
+
+async function runResearch(idx){
+  const r = researchData[idx];
+  if(!r) return;
+  const logEl = document.getElementById('research-log-'+r.id);
+  const addLog = msg => { if(logEl){ logEl.innerHTML += '<div style="padding:1px 0;line-height:1.6">'+msg+'</div>'; logEl.scrollTop = logEl.scrollHeight; } };
+  const setStatus = txt => { const el = document.getElementById('research-status-'+r.id); if(el) el.textContent = txt; };
+
+  try {
+    // ── STEP 1: Analyze top Google results for topic ──
+    addLog('→ Phân tích top Google cho: <strong style="color:var(--green)">'+r.topic+'</strong>');
+    setStatus('Đang research top Google...');
+
+    const step1Prompt = `You are an expert SEO researcher and content strategist.
+
+Topic to research: "${r.topic}"
+Target location: ${r.location}
+Language: ${r.lang}
+
+TASK: Analyze what the TOP 20 Google results look like for this topic and related keywords. Based on your SEO knowledge:
+
+1. Identify the SERP landscape: What types of content rank (pillar pages, guides, listicles, local pages)?
+2. Identify the main keyword clusters competitors cover
+3. Find content gaps that are underserved
+
+Then create a COMPREHENSIVE Pillar-Cluster content plan with:
+- 1 PILLAR page (broad, authoritative, 3000-4000 words)
+- 6-10 CLUSTER articles per major sub-topic (1500-2500 words each)
+- Each article must have: specific SEO title, primary keyword, URL slug, search intent, word count, schema type
+- Include local GEO variants (${r.location}) where relevant
+- Mix: informational (how-to, guide, what-is) + commercial (best, cost, compare) + local
+
+Return ONLY JSON:
+{
+  "serp_insights": "Brief summary of what ranks for this topic",
+  "pillar": {
+    "title": "Main Pillar Page Title",
+    "keyword": "primary keyword",
+    "slug": "/pillar-page-slug/",
+    "wordcount": 3500,
+    "intent": "informational",
+    "schema": "Article",
+    "description": "What this pillar covers"
+  },
+  "clusters": [
+    {
+      "name": "Sub-topic Cluster Name",
+      "articles": [
+        {
+          "title": "Article Title",
+          "keyword": "target keyword",
+          "slug": "/blog/article-slug/",
+          "wordcount": 1800,
+          "intent": "informational|commercial|local",
+          "schema": "Article|HowTo|FAQPage|LocalBusiness",
+          "priority": "high|medium|low",
+          "notes": "Why this article matters for SEO"
+        }
+      ]
+    }
+  ],
+  "quick_wins": ["3-5 specific actions to do first for fast rankings"]
+}`;
+
+    const timeoutP = new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 60s')),60000));
+    const txt = await Promise.race([callAIUniversal([{role:'user',content:step1Prompt}], 4000), timeoutP]);
+    const clean = txt.replace(/```json|```/g,'').trim();
+    const jsonM = clean.match(/\{[\s\S]*\}/);
+    if(!jsonM) throw new Error('AI không trả về JSON hợp lệ');
+
+    const parsed = JSON.parse(jsonM[0]);
+    r.serpInsights = parsed.serp_insights || '';
+    r.pillar = parsed.pillar || null;
+    r.clusters = parsed.clusters || [];
+    r.quickWins = parsed.quick_wins || [];
+    r.status = 'done';
+
+    const totalArticles = r.clusters.reduce((a,c)=>a+(c.articles||[]).length,0) + (r.pillar?1:0);
+    addLog('✅ Xong! '+r.clusters.length+' clusters, '+totalArticles+' articles');
+    setStatus('Done');
+
+    saveResearchData();
+    // Update tab count
+    updateResearchCount();
+    // Re-render view
+    viewResearch(idx);
+
+  } catch(e){
+    r.status = 'error';
+    r.error = e.message;
+    saveResearchData();
+    addLog('✗ Lỗi: '+e.message);
+    setStatus('Error');
+  }
+}
+
+function viewResearch(idx){
+  const r = researchData[idx];
+  if(!r) return;
+  const c = document.getElementById('content');
+
+  if(r.status === 'running' || r.status === 'error'){
+    c.innerHTML = `
+    <div style="padding:20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button class="btn-outline" onclick="renderResearchPage()" style="font-size:11px">← Back</button>
+        <div style="font-size:16px;font-weight:600">${r.topic}</div>
+        <span id="research-status-${r.id}" style="font-size:11px;color:#60a5fa">Đang research...</span>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
+        <div style="font-size:11.5px;color:var(--text3);font-family:monospace;max-height:300px;overflow-y:auto" id="research-log-${r.id}">
+          ${r.status==='error'?'<div style="color:#f87171">✗ '+r.error+'</div>':''}
+        </div>
+        ${r.status==='running'?'<div style="margin-top:10px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--green);width:60%;animation:pulse 1.5s ease-in-out infinite"></div></div>':''}
+      </div>
+      ${r.status==='error'?`<button class="btn-outline" onclick="retryResearch(${idx})" style="margin-top:12px;font-size:12px">🔄 Retry</button>`:''}
+    </div>`;
+    return;
+  }
+
+  // Render full result
+  const totalArt = r.clusters.reduce((a,c)=>a+(c.articles||[]).length,0) + (r.pillar?1:0);
+  const queue = getArticleQueue();
+  const qKeys = new Set(queue.map(q=>q.slug||q.title));
+
+  const pillarHTML = r.pillar ? `
+    <div style="background:var(--gdim);border:1px solid var(--gborder);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:11px;font-weight:700;background:#1e3a5f;color:#60a5fa;border-radius:4px;padding:2px 8px">PILLAR</span>
+        <span style="font-size:14px;font-weight:600;color:var(--text)">${r.pillar.title}</span>
+        <button onclick="addResearchItemToQueue(${idx},'pillar',0)" style="margin-left:auto;background:${qKeys.has(r.pillar.slug)?'var(--gdim)':'var(--green)'};color:${qKeys.has(r.pillar.slug)?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">
+          ${qKeys.has(r.pillar.slug)?'✓ Đã thêm':'+ Thêm'}
+        </button>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text3)">
+        <span>🔑 ${r.pillar.keyword}</span>
+        <span style="font-family:monospace">🔗 ${r.pillar.slug}</span>
+        <span>📏 ${r.pillar.wordcount}w</span>
+        <span>🎯 ${r.pillar.intent}</span>
+        <span>🏷 ${r.pillar.schema}</span>
+      </div>
+      ${r.pillar.description?`<div style="font-size:11.5px;color:var(--text3);margin-top:6px">${r.pillar.description}</div>`:''}
+    </div>` : '';
+
+  const clustersHTML = r.clusters.map((cl,ci)=>{
+    const rows = (cl.articles||[]).map((a,ai)=>{
+      const inQ = qKeys.has(a.slug||a.title);
+      const safe = JSON.stringify({title:a.title,slug:a.slug,topic:cl.name,keyword:a.keyword,source:'research'}).replace(/"/g,'&quot;');
+      const intentIcon = a.intent==='commercial'?'🛒':a.intent==='local'?'📍':'ℹ️';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 10px;color:var(--text3);font-size:11px;font-family:monospace;width:32px">${ai+1}</td>
+        <td style="padding:8px 12px">
+          <div style="font-size:13px;font-weight:500">${intentIcon} ${a.title}</div>
+          <div style="font-size:10.5px;color:var(--text3);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap">
+            <span>🔑 ${a.keyword}</span>
+            <span>📏 ${a.wordcount}w</span>
+            ${a.notes?`<span style="color:#60a5fa">💡 ${a.notes}</span>`:''}
+          </div>
+        </td>
+        <td style="padding:8px 10px;font-size:10.5px;font-family:monospace;color:var(--text3);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.slug}</td>
+        <td style="padding:8px 10px;text-align:right;white-space:nowrap">
+          <button onclick="addToQueue(${safe})" style="background:${inQ?'var(--gdim)':'var(--green)'};color:${inQ?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:5px;padding:3px 9px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${inQ?'✓':'+ Thêm'}</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `<div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;font-weight:600">${cl.name}</span>
+        <span style="font-size:11px;color:var(--text3)">${(cl.articles||[]).length} bài</span>
+        <button onclick="addAllClusterToQueue(${idx},${ci})" style="margin-left:auto;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text2);padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit">+ Tất cả</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+        <colgroup><col style="width:32px"><col><col style="width:210px"><col style="width:80px"></colgroup>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
+  const quickWinsHTML = r.quickWins?.length ? `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">⚡ Quick Wins — Làm ngay để rank nhanh</div>
+      <ol style="margin:0;padding-left:18px;color:var(--text3);font-size:12.5px;line-height:2">
+        ${r.quickWins.map(w=>`<li>${w}</li>`).join('')}
+      </ol>
+    </div>` : '';
+
+  c.innerHTML = `
+  <div style="padding:20px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn-outline" onclick="renderResearchPage()" style="font-size:11px">← Back</button>
+      <div style="font-size:16px;font-weight:600">${r.topic}</div>
+      <span style="font-size:11px;color:var(--green)">✓ ${totalArt} articles · ${r.clusters.length} clusters</span>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button onclick="addAllResearchToQueue(${idx})" style="background:var(--green);color:#000;border:none;border-radius:5px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">+ Thêm tất cả</button>
+        <button class="btn-outline" onclick="showView('articles')" style="font-size:11px">📋 Danh sách bài (${getArticleQueue().length})</button>
+      </div>
+    </div>
+
+    ${r.serpInsights?`<div style="background:#1e3a5f22;border:1px solid #60a5fa33;border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.7">
+      <strong style="color:#60a5fa">🔍 SERP Insights:</strong> ${r.serpInsights}
+    </div>`:''}
+
+    ${quickWinsHTML}
+    ${pillarHTML}
+    ${clustersHTML}
+  </div>`;
+}
+
+function addResearchItemToQueue(resIdx, type, artIdx){
+  const r = researchData[resIdx];
+  if(!r) return;
+  const item = type==='pillar' ? r.pillar : r.clusters[artIdx];
+  if(!item) return;
+  addToQueue({title:item.title, slug:item.slug, topic:r.topic, keyword:item.keyword, source:'research'});
+  viewResearch(resIdx);
+}
+
+function addAllClusterToQueue(resIdx, clIdx){
+  const r = researchData[resIdx];
+  if(!r) return;
+  const cl = r.clusters[clIdx];
+  if(!cl) return;
+  const q = getArticleQueue();
+  const keys = new Set(q.map(x=>x.slug||x.title));
+  let added = 0;
+  (cl.articles||[]).forEach(a=>{
+    const key = a.slug||a.title;
+    if(!keys.has(key)){
+      q.push({title:a.title,slug:a.slug,topic:cl.name,keyword:a.keyword,source:'research',addedAt:new Date().toLocaleDateString('vi-VN')});
+      keys.add(key); added++;
+    }
+  });
+  saveArticleQueue(q);
+  toast('✓ Đã thêm '+added+' bài','ok');
+  viewResearch(resIdx);
+}
+
+function addAllResearchToQueue(resIdx){
+  const r = researchData[resIdx];
+  if(!r) return;
+  const q = getArticleQueue();
+  const keys = new Set(q.map(x=>x.slug||x.title));
+  let added = 0;
+  if(r.pillar && !keys.has(r.pillar.slug)){
+    q.push({title:r.pillar.title,slug:r.pillar.slug,topic:r.topic,keyword:r.pillar.keyword,source:'research',addedAt:new Date().toLocaleDateString('vi-VN')});
+    keys.add(r.pillar.slug); added++;
+  }
+  r.clusters.forEach(cl=>(cl.articles||[]).forEach(a=>{
+    const key = a.slug||a.title;
+    if(!keys.has(key)){
+      q.push({title:a.title,slug:a.slug,topic:cl.name,keyword:a.keyword,source:'research',addedAt:new Date().toLocaleDateString('vi-VN')});
+      keys.add(key); added++;
+    }
+  }));
+  saveArticleQueue(q);
+  toast('✓ Đã thêm '+added+' articles vào danh sách','ok');
+  viewResearch(resIdx);
+}
+
+function deleteResearch(idx){
+  if(!confirm('Xóa research "'+researchData[idx].topic+'"?')) return;
+  researchData.splice(idx,1);
+  saveResearchData();
+  renderResearchPage();
+}
+
+function retryResearch(idx){
+  researchData[idx].status = 'running';
+  researchData[idx].error = '';
+  saveResearchData();
+  viewResearch(idx);
+  runResearch(idx);
+}
+
+// Load saved research count on init
+updateResearchCount();
+
 // ── IL SETTINGS ──
 function getILSettings(){ return JSON.parse(localStorage.getItem('genseo_il_settings')||'{"maxLinks":5}'); }
 function saveILSettings(){
@@ -4027,6 +4399,40 @@ async function callAIUniversal(messages, maxTokens=2000){
   return d.choices?.[0]?.message?.content || '';
 }
 async function _callProvider(provider, messages, maxTokens){ return callAIUniversal(messages, maxTokens); }
+
+
 </script>
+<!-- RESEARCH MODAL -->
+<div class="modal-ov" id="researchModal">
+  <div class="modal" style="max-width:480px">
+    <div class="m-header">
+      <div class="m-title">🔬 New Research</div>
+      <div class="m-close" onclick="closeResearchModal()">✕</div>
+    </div>
+    <div class="form-grp">
+      <label class="form-lbl">Topic cần research <span class="req">*</span></label>
+      <input class="form-inp" id="researchTopicInput" placeholder="VD: concrete driveway installation Calgary" type="text">
+      <div class="form-hint">AI sẽ phân tích top Google cho topic này và tạo cụm bài viết Pillar-Cluster</div>
+    </div>
+    <div class="form-grp" style="margin-top:12px">
+      <label class="form-lbl">Target Location</label>
+      <input class="form-inp" id="researchLocation" placeholder="VD: Calgary, Alberta, Canada" type="text" value="Calgary, Alberta, Canada">
+    </div>
+    <div class="form-grp" style="margin-top:12px">
+      <label class="form-lbl">Output Language</label>
+      <select class="form-inp" id="researchLang">
+        <option value="en">🇺🇸 English</option>
+        <option value="vi">🇻🇳 Tiếng Việt</option>
+      </select>
+    </div>
+    <div style="background:var(--surface2);border-radius:7px;padding:10px 12px;font-size:11.5px;color:var(--text3);margin-top:12px;line-height:1.7">
+      💡 AI sẽ: phân tích SERP landscape → xác định sub-topics → tạo Pillar page + 6-10 Cluster articles mỗi nhóm → đề xuất Quick Wins
+    </div>
+    <div class="m-footer">
+      <button class="btn-cancel" onclick="closeResearchModal()">Hủy</button>
+      <button class="btn-submit" onclick="startResearch()">🔬 Bắt đầu Research</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
