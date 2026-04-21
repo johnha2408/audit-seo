@@ -3886,8 +3886,8 @@ const _savedCP = localStorage.getItem('genseo_cp');
 if(_savedCP){ try{ cpData = JSON.parse(_savedCP); const cnt=document.getElementById('tb-cp-cnt'); if(cnt) cnt.textContent=cpData.clusters?.length||0; }catch(e){} }
 
 // ── RESEARCH FEATURE ─────────────────────────────────────
+// ── RESEARCH FEATURE — 3-tier Pyramid Model ─────────────────
 let researchData = JSON.parse(localStorage.getItem('genseo_research') || '[]');
-// researchData = [{id, topic, lang, status, clusters, createdAt}]
 
 function saveResearchData(){ localStorage.setItem('genseo_research', JSON.stringify(researchData)); updateResearchCount(); }
 function updateResearchCount(){
@@ -3898,12 +3898,11 @@ function updateResearchCount(){
 function renderResearchPage(){
   updateResearchCount();
   const c = document.getElementById('content');
-  c.innerHTML = `
-  <div style="padding:20px">
+  c.innerHTML = `<div style="padding:20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
       <div>
         <div style="font-size:17px;font-weight:700">Research</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">Nhập topic → AI research top Google → generate cụm bài viết Pillar-Cluster chuẩn SEO/GEO</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Nhập topic → AI nghiên cứu SERP thực tế → generate cụm bài Pillar–Cluster–Sub-cluster (3 tầng)</div>
       </div>
       <button class="btn-green" onclick="openResearchModal()">+ New Research</button>
     </div>
@@ -3912,45 +3911,44 @@ function renderResearchPage(){
 }
 
 function renderResearchEmpty(){
-  return `
-  <div style="text-align:center;padding:48px 24px">
+  return `<div style="text-align:center;padding:48px 24px">
     <div style="font-size:40px;margin-bottom:12px">🔬</div>
     <div style="font-size:14px;font-weight:600;margin-bottom:6px">Chưa có research nào</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:20px">Nhập topic → AI phân tích top 20 Google → generate Pillar-Cluster plan</div>
-    <button class="btn-green" onclick="openResearchModal()">+ Bắt đầu research</button>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Mô hình Kim tự tháp 3 tầng:</div>
+    <div style="font-size:11.5px;color:var(--text3);line-height:2;margin-bottom:20px">
+      🏛 <strong style="color:var(--text2)">Tầng 1 — Pillar</strong>: 1 bài Ultimate Guide, rộng, tổng quan<br>
+      📚 <strong style="color:var(--text2)">Tầng 2 — Cluster</strong>: Nhiều bài đi sâu từng khía cạnh của pillar<br>
+      🔍 <strong style="color:var(--text2)">Tầng 3 — Sub-cluster</strong>: Bài siêu cụ thể, long-tail, ít cạnh tranh → win organic traffic
+    </div>
+    <button class="btn-green" onclick="openResearchModal()">+ Bắt đầu Research</button>
   </div>`;
 }
 
 function renderResearchList(){
-  return researchData.map((r,i) => `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:12px">
+  return researchData.map((r,i) => {
+    const total = (r.pillar?1:0)
+      + (r.clusters||[]).reduce((a,c)=>a+(c.articles||[]).length,0)
+      + (r.clusters||[]).reduce((a,c)=>a+(c.articles||[]).reduce((b,art)=>b+(art.subClusters||[]).length,0),0);
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:12px">
       <div style="display:flex;align-items:flex-start;gap:12px">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
             <div style="font-size:15px;font-weight:600">${r.topic}</div>
-            <span style="font-size:10px;background:${r.status==='done'?'var(--gdim)':r.status==='running'?'#1e3a5f':'var(--surface2)'};color:${r.status==='done'?'var(--green)':r.status==='running'?'#60a5fa':'var(--text3)'};border:1px solid ${r.status==='done'?'var(--gborder)':r.status==='running'?'#60a5fa44':'var(--border)'};border-radius:4px;padding:2px 7px;font-weight:600">
-              ${r.status==='done'?'✓ Done':r.status==='running'?'⏳ Đang research':'Draft'}
+            <span style="font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;background:${r.status==='done'?'var(--gdim)':r.status==='running'?'#1e3a5f':'var(--surface2)'};color:${r.status==='done'?'var(--green)':r.status==='running'?'#60a5fa':'var(--text3)'}">
+              ${r.status==='done'?'✓ Done':r.status==='running'?'⏳ Đang research...':r.status==='error'?'✗ Error':'Draft'}
             </span>
           </div>
-          <div style="font-size:11px;color:var(--text3)">📅 ${r.createdAt} · ${r.clusters?.length||0} clusters · ${r.clusters?.reduce((a,c)=>a+(c.articles||[]).length,0)||0} articles</div>
+          <div style="font-size:11px;color:var(--text3)">📅 ${r.createdAt} · ${total} articles · ${(r.clusters||[]).length} clusters · ${r.location||''}</div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn-outline" onclick="viewResearch(${i})" style="font-size:11px">Xem</button>
           <button class="btn-outline" onclick="deleteResearch(${i})" style="font-size:11px;color:#f87171">✕</button>
         </div>
       </div>
-      ${r.status==='done' && r.clusters?.length ? renderResearchPreview(r) : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
-function renderResearchPreview(r){
-  return `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-    ${r.clusters.slice(0,5).map(c=>`<span style="font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 9px;color:var(--text2)">${c.name} <span style="color:var(--text3)">(${(c.articles||[]).length})</span></span>`).join('')}
-    ${r.clusters.length>5?`<span style="font-size:11px;color:var(--text3)">+${r.clusters.length-5} more</span>`:''}
-  </div>`;
-}
-
-// ── MODAL ──
 function openResearchModal(){
   document.getElementById('researchModal').classList.add('show');
   setTimeout(()=>document.getElementById('researchTopicInput').focus(),100);
@@ -3963,16 +3961,11 @@ async function startResearch(){
   const location = document.getElementById('researchLocation').value.trim() || 'Canada';
   if(!topic){ toast('Nhập topic cần research','err'); return; }
   if(!getApiKey()){ toast('Cần OpenRouter API Key','err'); openSettings(); return; }
-
   closeResearchModal();
-
-  const id = Date.now();
-  const item = { id, topic, lang, location, status:'running', clusters:[], gaps:[], createdAt: new Date().toLocaleDateString('vi-VN') };
+  const item = { id: Date.now(), topic, lang, location, status:'running', clusters:[], createdAt: new Date().toLocaleDateString('vi-VN') };
   researchData.unshift(item);
   saveResearchData();
   renderResearchPage();
-
-  // Immediately show progress view
   viewResearch(0);
   await runResearch(0);
 }
@@ -3981,94 +3974,134 @@ async function runResearch(idx){
   const r = researchData[idx];
   if(!r) return;
   const logEl = document.getElementById('research-log-'+r.id);
-  const addLog = msg => { if(logEl){ logEl.innerHTML += '<div style="padding:1px 0;line-height:1.6">'+msg+'</div>'; logEl.scrollTop = logEl.scrollHeight; } };
-  const setStatus = txt => { const el = document.getElementById('research-status-'+r.id); if(el) el.textContent = txt; };
+  const addLog = msg => { if(logEl){ logEl.innerHTML += '<div>'+msg+'</div>'; logEl.scrollTop=logEl.scrollHeight; } };
+  const setStatus = txt => { const el=document.getElementById('research-status-'+r.id); if(el) el.textContent=txt; };
 
   try {
-    // ── STEP 1: Analyze top Google results for topic ──
-    addLog('→ Phân tích top Google cho: <strong style="color:var(--green)">'+r.topic+'</strong>');
-    setStatus('Đang research top Google...');
+    // ── PHASE 1: Deep SERP Research ──
+    addLog('→ <strong>Phase 1:</strong> Phân tích SERP & keyword landscape...');
+    setStatus('Researching SERP...');
 
-    const step1Prompt = `You are an expert SEO researcher and content strategist.
+    const phase1 = `You are a senior SEO content strategist with deep expertise in topical authority and keyword research.
 
-Topic to research: "${r.topic}"
-Target location: ${r.location}
-Language: ${r.lang}
+TOPIC: "${r.topic}"
+LOCATION: ${r.location}
+LANGUAGE: ${r.lang}
 
-TASK: Analyze what the TOP 20 Google results look like for this topic and related keywords. Based on your SEO knowledge:
-
-1. Identify the SERP landscape: What types of content rank (pillar pages, guides, listicles, local pages)?
-2. Identify the main keyword clusters competitors cover
-3. Find content gaps that are underserved
-
-Then create a COMPREHENSIVE Pillar-Cluster content plan with:
-- 1 PILLAR page (broad, authoritative, 3000-4000 words)
-- 6-10 CLUSTER articles per major sub-topic (1500-2500 words each)
-- Each article must have: specific SEO title, primary keyword, URL slug, search intent, word count, schema type
-- Include local GEO variants (${r.location}) where relevant
-- Mix: informational (how-to, guide, what-is) + commercial (best, cost, compare) + local
+PHASE 1 TASK — Deep SERP Research:
+Analyze the search landscape for this topic thoroughly:
+1. What are the TOP 10-20 ranking pages for this topic? What content types dominate (guides, listicles, local pages, comparison pages)?
+2. What are ALL the related keywords and search queries (head terms + long-tail + questions + local variants)?
+3. What sub-topics do top ranking sites cover? What do they miss?
+4. What is the search intent breakdown (informational vs commercial vs local)?
+5. What content gaps exist that are UNDERSERVED?
 
 Return ONLY JSON:
 {
-  "serp_insights": "Brief summary of what ranks for this topic",
+  "serp_overview": "2-3 sentences describing the SERP landscape",
+  "dominant_content_types": ["type1", "type2"],
+  "keyword_clusters": [
+    {"cluster": "Cluster Name", "head_keyword": "main kw", "related_keywords": ["kw1","kw2","kw3"], "search_volume": "high|medium|low", "competition": "high|medium|low", "intent": "informational|commercial|local|mixed"}
+  ],
+  "content_gaps": ["gap 1", "gap 2", "gap 3"],
+  "local_opportunities": ["local opportunity 1", "local opportunity 2"],
+  "quick_wins": ["action 1", "action 2", "action 3", "action 4", "action 5"]
+}`;
+
+    const r1 = await callAIUniversal([{role:'user',content:phase1}], 3000);
+    const j1 = JSON.parse((r1.replace(/```json|```/g,'').trim().match(/\{[\s\S]*\}/)||['{}'])[0]);
+    r.serpInsights = j1.serp_overview||'';
+    r.keywordClusters = j1.keyword_clusters||[];
+    r.contentGaps = j1.content_gaps||[];
+    r.localOpportunities = j1.local_opportunities||[];
+    r.quickWins = j1.quick_wins||[];
+    addLog('✓ Phase 1 xong: '+r.keywordClusters.length+' keyword clusters, '+r.contentGaps.length+' gaps');
+    saveResearchData();
+
+    // ── PHASE 2: Build 3-tier Pyramid ──
+    addLog('→ <strong>Phase 2:</strong> Building 3-tier Pyramid content plan...');
+    setStatus('Building Pillar-Cluster-Sub-cluster...');
+
+    const clusterList = j1.keyword_clusters.map(k=>`- ${k.cluster}: ${k.head_keyword} (${k.intent}, ${k.competition} competition)`).join('\n');
+
+    const phase2 = `You are building a 3-TIER PYRAMID content strategy.
+
+TOPIC: "${r.topic}" | LOCATION: ${r.location} | LANGUAGE: ${r.lang}
+
+KEYWORD CLUSTERS IDENTIFIED:
+${clusterList}
+
+CONTENT GAPS: ${(j1.content_gaps||[]).join(', ')}
+LOCAL OPPORTUNITIES: ${(j1.local_opportunities||[]).join(', ')}
+
+BUILD THE 3-TIER PYRAMID:
+
+TIER 1 — PILLAR (1 article, very broad):
+- Ultimate Guide covering the entire topic at high level
+- Target: broad head keyword
+- 3500-4500 words
+- Links down to ALL cluster articles
+
+TIER 2 — CLUSTERS (one per keyword cluster, 5-8 articles each):
+- Each cluster article covers ONE specific aspect deeply
+- Target: medium-tail keywords
+- 1500-2500 words
+- Links to sub-clusters below, links up to pillar
+
+TIER 3 — SUB-CLUSTERS (3-5 per cluster article):
+- Ultra-specific, long-tail, question-based
+- These WIN the most organic traffic (low competition, high intent)
+- 800-1500 words
+- "Can you install X in winter?", "How much does X cost in [city]?", etc.
+
+RULES:
+- Tier 3 is where you WIN traffic — generate MORE sub-clusters, not less
+- Each article needs: title, keyword, slug, wordcount, intent, schema, priority, notes
+- Include LOCAL variants for ${r.location} throughout
+- Mix intent: informational + commercial + local
+- Never repeat keywords between articles
+
+Return ONLY JSON:
+{
   "pillar": {
-    "title": "Main Pillar Page Title",
-    "keyword": "primary keyword",
-    "slug": "/pillar-page-slug/",
-    "wordcount": 3500,
-    "intent": "informational",
-    "schema": "Article",
-    "description": "What this pillar covers"
+    "title": "...", "keyword": "...", "slug": "/...", "wordcount": 4000,
+    "intent": "informational", "schema": "Article", "description": "..."
   },
   "clusters": [
     {
-      "name": "Sub-topic Cluster Name",
+      "name": "Cluster Name",
+      "head_keyword": "...",
       "articles": [
         {
-          "title": "Article Title",
-          "keyword": "target keyword",
-          "slug": "/blog/article-slug/",
-          "wordcount": 1800,
-          "intent": "informational|commercial|local",
-          "schema": "Article|HowTo|FAQPage|LocalBusiness",
-          "priority": "high|medium|low",
-          "notes": "Why this article matters for SEO"
+          "title": "...", "keyword": "...", "slug": "/blog/...", "wordcount": 2000,
+          "intent": "informational|commercial|local", "schema": "Article|HowTo|FAQPage",
+          "priority": "high|medium|low", "notes": "...",
+          "sub_clusters": [
+            {"title": "...", "keyword": "...", "slug": "/blog/...", "wordcount": 1000,
+             "intent": "...", "schema": "FAQPage|HowTo", "notes": "why this long-tail wins traffic"}
+          ]
         }
       ]
     }
-  ],
-  "quick_wins": ["3-5 specific actions to do first for fast rankings"]
+  ]
 }`;
 
-    const timeoutP = new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 60s')),60000));
-    const txt = await Promise.race([callAIUniversal([{role:'user',content:step1Prompt}], 4000), timeoutP]);
-    const clean = txt.replace(/```json|```/g,'').trim();
-    const jsonM = clean.match(/\{[\s\S]*\}/);
-    if(!jsonM) throw new Error('AI không trả về JSON hợp lệ');
-
-    const parsed = JSON.parse(jsonM[0]);
-    r.serpInsights = parsed.serp_insights || '';
-    r.pillar = parsed.pillar || null;
-    r.clusters = parsed.clusters || [];
-    r.quickWins = parsed.quick_wins || [];
+    const r2 = await callAIUniversal([{role:'user',content:phase2}], 4000);
+    const j2 = JSON.parse((r2.replace(/```json|```/g,'').trim().match(/\{[\s\S]*\}/)||['{}'])[0]);
+    r.pillar = j2.pillar||null;
+    r.clusters = j2.clusters||[];
     r.status = 'done';
 
-    const totalArticles = r.clusters.reduce((a,c)=>a+(c.articles||[]).length,0) + (r.pillar?1:0);
-    addLog('✅ Xong! '+r.clusters.length+' clusters, '+totalArticles+' articles');
-    setStatus('Done');
-
+    const t2 = (r.clusters||[]).reduce((a,c)=>a+(c.articles||[]).length,0);
+    const t3 = (r.clusters||[]).reduce((a,c)=>a+(c.articles||[]).reduce((b,art)=>b+(art.sub_clusters||[]).length,0),0);
+    addLog('✅ Done! Pillar: 1 · Cluster: '+t2+' · Sub-cluster: '+t3);
     saveResearchData();
-    // Update tab count
-    updateResearchCount();
-    // Re-render view
     viewResearch(idx);
 
   } catch(e){
-    r.status = 'error';
-    r.error = e.message;
+    r.status = 'error'; r.error = e.message;
     saveResearchData();
     addLog('✗ Lỗi: '+e.message);
-    setStatus('Error');
   }
 }
 
@@ -4077,137 +4110,178 @@ function viewResearch(idx){
   if(!r) return;
   const c = document.getElementById('content');
 
-  if(r.status === 'running' || r.status === 'error'){
-    c.innerHTML = `
-    <div style="padding:20px">
+  if(r.status==='running' || r.status==='error'){
+    c.innerHTML = `<div style="padding:20px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
         <button class="btn-outline" onclick="renderResearchPage()" style="font-size:11px">← Back</button>
         <div style="font-size:16px;font-weight:600">${r.topic}</div>
         <span id="research-status-${r.id}" style="font-size:11px;color:#60a5fa">Đang research...</span>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
-        <div style="font-size:11.5px;color:var(--text3);font-family:monospace;max-height:300px;overflow-y:auto" id="research-log-${r.id}">
-          ${r.status==='error'?'<div style="color:#f87171">✗ '+r.error+'</div>':''}
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Research Log:</div>
+        <div style="font-size:11.5px;color:var(--text3);font-family:monospace;max-height:280px;overflow-y:auto;line-height:1.8" id="research-log-${r.id}">
+          ${r.status==='error'?'<div style="color:#f87171">✗ '+r.error+'</div>':'<div style="color:#60a5fa">⏳ Đang chạy Phase 1...</div>'}
         </div>
-        ${r.status==='running'?'<div style="margin-top:10px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--green);width:60%;animation:pulse 1.5s ease-in-out infinite"></div></div>':''}
+        ${r.status==='running'?'<div style="margin-top:10px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:50%;background:var(--green);animation:scan 1.5s ease-in-out infinite alternate"></div></div>':''}
       </div>
-      ${r.status==='error'?`<button class="btn-outline" onclick="retryResearch(${idx})" style="margin-top:12px;font-size:12px">🔄 Retry</button>`:''}
+      ${r.status==='error'?`<button class="btn-outline" onclick="retryResearch(${idx})" style="font-size:12px">🔄 Retry</button>`:''}
     </div>`;
     return;
   }
 
-  // Render full result
-  const totalArt = r.clusters.reduce((a,c)=>a+(c.articles||[]).length,0) + (r.pillar?1:0);
+  // ── Full result view ──
   const queue = getArticleQueue();
   const qKeys = new Set(queue.map(q=>q.slug||q.title));
+  const fmtNum = n => n||'';
 
-  const pillarHTML = r.pillar ? `
-    <div style="background:var(--gdim);border:1px solid var(--gborder);border-radius:8px;padding:14px 16px;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="font-size:11px;font-weight:700;background:#1e3a5f;color:#60a5fa;border-radius:4px;padding:2px 8px">PILLAR</span>
-        <span style="font-size:14px;font-weight:600;color:var(--text)">${r.pillar.title}</span>
-        <button onclick="addResearchItemToQueue(${idx},'pillar',0)" style="margin-left:auto;background:${qKeys.has(r.pillar.slug)?'var(--gdim)':'var(--green)'};color:${qKeys.has(r.pillar.slug)?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">
-          ${qKeys.has(r.pillar.slug)?'✓ Đã thêm':'+ Thêm'}
-        </button>
+  // Count totals
+  const t1 = r.pillar ? 1 : 0;
+  const t2 = (r.clusters||[]).reduce((a,c)=>a+(c.articles||[]).length,0);
+  const t3 = (r.clusters||[]).reduce((a,c)=>a+(c.articles||[]).reduce((b,art)=>b+(art.sub_clusters||[]).length,0),0);
+
+  const pillarHTML = r.pillar ? buildPillarRow(r.pillar, idx, qKeys) : '';
+
+  const clustersHTML = (r.clusters||[]).map((cl,ci)=>buildClusterBlock(cl, ci, idx, qKeys)).join('');
+
+  c.innerHTML = `<div style="padding:20px">
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn-outline" onclick="renderResearchPage()" style="font-size:11px;flex-shrink:0">← Back</button>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:16px;font-weight:600">${r.topic}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap">
+          <span>🏛 <strong style="color:var(--text2)">${t1}</strong> Pillar</span>
+          <span>📚 <strong style="color:var(--text2)">${t2}</strong> Cluster</span>
+          <span>🔍 <strong style="color:#60a5fa">${t3}</strong> Sub-cluster</span>
+          <span style="color:var(--text3)">= ${t1+t2+t3} articles total</span>
+        </div>
       </div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text3)">
-        <span>🔑 ${r.pillar.keyword}</span>
-        <span style="font-family:monospace">🔗 ${r.pillar.slug}</span>
-        <span>📏 ${r.pillar.wordcount}w</span>
-        <span>🎯 ${r.pillar.intent}</span>
-        <span>🏷 ${r.pillar.schema}</span>
-      </div>
-      ${r.pillar.description?`<div style="font-size:11.5px;color:var(--text3);margin-top:6px">${r.pillar.description}</div>`:''}
-    </div>` : '';
-
-  const clustersHTML = r.clusters.map((cl,ci)=>{
-    const rows = (cl.articles||[]).map((a,ai)=>{
-      const inQ = qKeys.has(a.slug||a.title);
-      const safe = JSON.stringify({title:a.title,slug:a.slug,topic:cl.name,keyword:a.keyword,source:'research'}).replace(/"/g,'&quot;');
-      const intentIcon = a.intent==='commercial'?'🛒':a.intent==='local'?'📍':'ℹ️';
-      return `<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:8px 10px;color:var(--text3);font-size:11px;font-family:monospace;width:32px">${ai+1}</td>
-        <td style="padding:8px 12px">
-          <div style="font-size:13px;font-weight:500">${intentIcon} ${a.title}</div>
-          <div style="font-size:10.5px;color:var(--text3);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap">
-            <span>🔑 ${a.keyword}</span>
-            <span>📏 ${a.wordcount}w</span>
-            ${a.notes?`<span style="color:#60a5fa">💡 ${a.notes}</span>`:''}
-          </div>
-        </td>
-        <td style="padding:8px 10px;font-size:10.5px;font-family:monospace;color:var(--text3);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.slug}</td>
-        <td style="padding:8px 10px;text-align:right;white-space:nowrap">
-          <button onclick="addToQueue(${safe})" style="background:${inQ?'var(--gdim)':'var(--green)'};color:${inQ?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:5px;padding:3px 9px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${inQ?'✓':'+ Thêm'}</button>
-        </td>
-      </tr>`;
-    }).join('');
-
-    return `<div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)">
-        <span style="font-size:13px;font-weight:600">${cl.name}</span>
-        <span style="font-size:11px;color:var(--text3)">${(cl.articles||[]).length} bài</span>
-        <button onclick="addAllClusterToQueue(${idx},${ci})" style="margin-left:auto;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text2);padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit">+ Tất cả</button>
-      </div>
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
-        <colgroup><col style="width:32px"><col><col style="width:210px"><col style="width:80px"></colgroup>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-  }).join('');
-
-  const quickWinsHTML = r.quickWins?.length ? `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:10px">⚡ Quick Wins — Làm ngay để rank nhanh</div>
-      <ol style="margin:0;padding-left:18px;color:var(--text3);font-size:12.5px;line-height:2">
-        ${r.quickWins.map(w=>`<li>${w}</li>`).join('')}
-      </ol>
-    </div>` : '';
-
-  c.innerHTML = `
-  <div style="padding:20px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <button class="btn-outline" onclick="renderResearchPage()" style="font-size:11px">← Back</button>
-      <div style="font-size:16px;font-weight:600">${r.topic}</div>
-      <span style="font-size:11px;color:var(--green)">✓ ${totalArt} articles · ${r.clusters.length} clusters</span>
-      <div style="margin-left:auto;display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-shrink:0">
         <button onclick="addAllResearchToQueue(${idx})" style="background:var(--green);color:#000;border:none;border-radius:5px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">+ Thêm tất cả</button>
-        <button class="btn-outline" onclick="showView('articles')" style="font-size:11px">📋 Danh sách bài (${getArticleQueue().length})</button>
+        <button class="btn-outline" onclick="showView('articles')" style="font-size:11px">📋 Bài viết (${getArticleQueue().length})</button>
       </div>
     </div>
 
-    ${r.serpInsights?`<div style="background:#1e3a5f22;border:1px solid #60a5fa33;border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.7">
+    <!-- SERP Insights -->
+    ${r.serpInsights ? `<div style="background:#1e3a5f22;border:1px solid #60a5fa33;border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.7">
       <strong style="color:#60a5fa">🔍 SERP Insights:</strong> ${r.serpInsights}
-    </div>`:''}
+    </div>` : ''}
 
-    ${quickWinsHTML}
+    <!-- Quick Wins -->
+    ${r.quickWins?.length ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:14px">
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:8px">⚡ Quick Wins</div>
+      <ol style="margin:0;padding-left:18px;color:var(--text3);font-size:12px;line-height:2">
+        ${r.quickWins.map(w=>`<li>${w}</li>`).join('')}
+      </ol>
+    </div>` : ''}
+
+    <!-- Pyramid Tiers Legend -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <span style="font-size:11px;background:#1e3a5f;color:#60a5fa;border-radius:5px;padding:4px 10px">🏛 Tầng 1 — Pillar (1 bài, rộng nhất)</span>
+      <span style="font-size:11px;background:var(--gdim);color:var(--green);border-radius:5px;padding:4px 10px">📚 Tầng 2 — Cluster (trung bình)</span>
+      <span style="font-size:11px;background:#312a00;color:#f59e0b;border-radius:5px;padding:4px 10px">🔍 Tầng 3 — Sub-cluster (long-tail, ít cạnh tranh)</span>
+    </div>
+
     ${pillarHTML}
     ${clustersHTML}
   </div>`;
 }
 
-function addResearchItemToQueue(resIdx, type, artIdx){
-  const r = researchData[resIdx];
-  if(!r) return;
-  const item = type==='pillar' ? r.pillar : r.clusters[artIdx];
-  if(!item) return;
-  addToQueue({title:item.title, slug:item.slug, topic:r.topic, keyword:item.keyword, source:'research'});
-  viewResearch(resIdx);
+function buildPillarRow(p, resIdx, qKeys){
+  const inQ = qKeys.has(p.slug||p.title);
+  const safe = JSON.stringify({title:p.title,slug:p.slug,topic:'Pillar',keyword:p.keyword,source:'research'}).replace(/"/g,'&quot;');
+  return `<div style="background:#1e3a5f22;border:2px solid #60a5fa44;border-radius:10px;padding:14px 18px;margin-bottom:16px">
+    <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;background:#1e3a5f;color:#60a5fa;border-radius:4px;padding:2px 8px">🏛 PILLAR — Tầng 1</span>
+          <span style="font-size:14px;font-weight:600;color:var(--text)">${p.title}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text3);display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+          <span>🔑 ${p.keyword}</span>
+          <span style="font-family:monospace">🔗 ${p.slug}</span>
+          <span>📏 ${p.wordcount}w</span>
+          <span>🎯 ${p.intent}</span>
+          <span>🏷 ${p.schema}</span>
+        </div>
+        ${p.description?`<div style="font-size:11.5px;color:var(--text3);margin-top:4px">${p.description}</div>`:''}
+      </div>
+      <button onclick="addToQueue(${safe})" style="background:${inQ?'var(--gdim)':'var(--green)'};color:${inQ?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:5px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0">
+        ${inQ?'✓ Đã thêm':'+ Thêm'}
+      </button>
+    </div>
+  </div>`;
 }
 
-function addAllClusterToQueue(resIdx, clIdx){
-  const r = researchData[resIdx];
-  if(!r) return;
-  const cl = r.clusters[clIdx];
-  if(!cl) return;
-  const q = getArticleQueue();
-  const keys = new Set(q.map(x=>x.slug||x.title));
+function buildClusterBlock(cl, ci, resIdx, qKeys){
+  const articlesHTML = (cl.articles||[]).map((a,ai)=>{
+    const inQ = qKeys.has(a.slug||a.title);
+    const safe = JSON.stringify({title:a.title,slug:a.slug,topic:cl.name,keyword:a.keyword,source:'research'}).replace(/"/g,'&quot;');
+    const intentIcon = a.intent==='commercial'?'🛒':a.intent==='local'?'📍':'ℹ️';
+    const subRows = (a.sub_clusters||[]).map((s,si)=>{
+      const sInQ = qKeys.has(s.slug||s.title);
+      const sSafe = JSON.stringify({title:s.title,slug:s.slug,topic:cl.name+' → '+a.title.substring(0,30),keyword:s.keyword,source:'research'}).replace(/"/g,'&quot;');
+      return `<tr style="border-bottom:1px solid var(--border);background:#312a0011">
+        <td style="padding:6px 8px 6px 36px;color:#f59e0b;font-size:10px;font-family:monospace;width:40px">└ T3</td>
+        <td style="padding:6px 10px">
+          <div style="font-size:12px;color:var(--text2)">🔍 ${s.title}</div>
+          <div style="font-size:10px;color:var(--text3);display:flex;gap:8px;margin-top:2px;flex-wrap:wrap">
+            <span>🔑 ${s.keyword}</span><span>📏 ${s.wordcount||1000}w</span>
+            ${s.notes?`<span style="color:#f59e0b">💡 ${s.notes}</span>`:''}
+          </div>
+        </td>
+        <td style="padding:6px 8px;font-size:10px;font-family:monospace;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.slug}</td>
+        <td style="padding:6px 8px;text-align:right;white-space:nowrap">
+          <button onclick="addToQueue(${sSafe})" style="background:${sInQ?'var(--gdim)':'#312a00'};color:${sInQ?'#f59e0b':'#f59e0b'};border:1px solid #f59e0b44;border-radius:4px;padding:2px 8px;font-size:10.5px;font-weight:600;cursor:pointer;font-family:inherit">${sInQ?'✓':'+ Thêm'}</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 10px;color:var(--green);font-size:10px;font-family:monospace;width:40px;font-weight:700">T2</td>
+      <td style="padding:8px 12px">
+        <div style="font-size:13px;font-weight:500">${intentIcon} ${a.title}</div>
+        <div style="font-size:10.5px;color:var(--text3);display:flex;gap:8px;margin-top:2px;flex-wrap:wrap">
+          <span>🔑 ${a.keyword}</span><span>📏 ${a.wordcount||1800}w</span>
+          ${a.notes?`<span style="color:#60a5fa">💡 ${a.notes}</span>`:''}
+        </div>
+      </td>
+      <td style="padding:8px 8px;font-size:10.5px;font-family:monospace;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.slug}</td>
+      <td style="padding:8px 8px;text-align:right;white-space:nowrap">
+        <button onclick="addToQueue(${safe})" style="background:${inQ?'var(--gdim)':'var(--green)'};color:${inQ?'var(--green)':'#000'};border:1px solid var(--gborder);border-radius:4px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">${inQ?'✓':'+ T2'}</button>
+      </td>
+    </tr>${subRows}`;
+  }).join('');
+
+  return `<div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)">
+      <span style="font-size:11px;font-weight:700;background:var(--gdim);color:var(--green);border-radius:4px;padding:2px 7px">📚 CLUSTER</span>
+      <span style="font-size:13px;font-weight:600">${cl.name}</span>
+      <span style="font-size:11px;color:var(--text3)">${(cl.articles||[]).length} cluster · ${(cl.articles||[]).reduce((a,art)=>a+(art.sub_clusters||[]).length,0)} sub-cluster</span>
+      <button onclick="addAllClusterToQueue(${resIdx},${ci})" style="margin-left:auto;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text2);padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit">+ Tất cả</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+      <colgroup><col style="width:40px"><col><col style="width:200px"><col style="width:80px"></colgroup>
+      <tbody>${articlesHTML}</tbody>
+    </table>
+  </div>`;
+}
+
+function addAllClusterToQueue(resIdx, ci){
+  const r = researchData[resIdx]; if(!r) return;
+  const cl = r.clusters[ci]; if(!cl) return;
+  const q = getArticleQueue(); const keys = new Set(q.map(x=>x.slug||x.title));
   let added = 0;
   (cl.articles||[]).forEach(a=>{
-    const key = a.slug||a.title;
-    if(!keys.has(key)){
-      q.push({title:a.title,slug:a.slug,topic:cl.name,keyword:a.keyword,source:'research',addedAt:new Date().toLocaleDateString('vi-VN')});
-      keys.add(key); added++;
-    }
+    ['',  ...(a.sub_clusters||[])].forEach((item,i)=>{
+      const art = i===0 ? a : item;
+      if(!art || !art.title) return;
+      const key = art.slug||art.title;
+      if(!keys.has(key)){
+        q.push({title:art.title,slug:art.slug||'',topic:cl.name,keyword:art.keyword||'',source:'research',addedAt:new Date().toLocaleDateString('vi-VN')});
+        keys.add(key); added++;
+      }
+    });
   });
   saveArticleQueue(q);
   toast('✓ Đã thêm '+added+' bài','ok');
@@ -4215,43 +4289,30 @@ function addAllClusterToQueue(resIdx, clIdx){
 }
 
 function addAllResearchToQueue(resIdx){
-  const r = researchData[resIdx];
-  if(!r) return;
-  const q = getArticleQueue();
-  const keys = new Set(q.map(x=>x.slug||x.title));
+  const r = researchData[resIdx]; if(!r) return;
+  const q = getArticleQueue(); const keys = new Set(q.map(x=>x.slug||x.title));
   let added = 0;
-  if(r.pillar && !keys.has(r.pillar.slug)){
-    q.push({title:r.pillar.title,slug:r.pillar.slug,topic:r.topic,keyword:r.pillar.keyword,source:'research',addedAt:new Date().toLocaleDateString('vi-VN')});
-    keys.add(r.pillar.slug); added++;
-  }
-  r.clusters.forEach(cl=>(cl.articles||[]).forEach(a=>{
-    const key = a.slug||a.title;
-    if(!keys.has(key)){
-      q.push({title:a.title,slug:a.slug,topic:cl.name,keyword:a.keyword,source:'research',addedAt:new Date().toLocaleDateString('vi-VN')});
+  const push = (title,slug,topic,keyword) => {
+    const key = slug||title;
+    if(!keys.has(key) && title){
+      q.push({title,slug:slug||'',topic,keyword:keyword||'',source:'research',addedAt:new Date().toLocaleDateString('vi-VN')});
       keys.add(key); added++;
     }
+  };
+  if(r.pillar) push(r.pillar.title,r.pillar.slug,r.topic,r.pillar.keyword);
+  (r.clusters||[]).forEach(cl=>(cl.articles||[]).forEach(a=>{
+    push(a.title,a.slug,cl.name,a.keyword);
+    (a.sub_clusters||[]).forEach(s=>push(s.title,s.slug,cl.name,s.keyword));
   }));
   saveArticleQueue(q);
   toast('✓ Đã thêm '+added+' articles vào danh sách','ok');
   viewResearch(resIdx);
 }
 
-function deleteResearch(idx){
-  if(!confirm('Xóa research "'+researchData[idx].topic+'"?')) return;
-  researchData.splice(idx,1);
-  saveResearchData();
-  renderResearchPage();
-}
+function deleteResearch(idx){ if(!confirm('Xóa "'+researchData[idx].topic+'"?')) return; researchData.splice(idx,1); saveResearchData(); renderResearchPage(); }
+function retryResearch(idx){ researchData[idx].status='running'; researchData[idx].error=''; saveResearchData(); viewResearch(idx); runResearch(idx); }
 
-function retryResearch(idx){
-  researchData[idx].status = 'running';
-  researchData[idx].error = '';
-  saveResearchData();
-  viewResearch(idx);
-  runResearch(idx);
-}
-
-// Load saved research count on init
+// Init
 updateResearchCount();
 
 // ── IL SETTINGS ──
